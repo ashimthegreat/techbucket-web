@@ -1,7 +1,7 @@
 // Assembles a ready-to-upload cPanel bundle in ./deploy/techbucket-site
 // (and techbucket-site.zip if the `zip` command exists).
 // Run after `next build`:  npm run package:cpanel
-import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, rmSync, writeFileSync, readFileSync, readdirSync, lstatSync, readlinkSync, symlinkSync } from "node:fs";
 import { execSync } from "node:child_process";
 import path from "node:path";
 
@@ -31,6 +31,22 @@ cpSync(standalone, out, {
     return !skip.has(rel);
   },
 });
+// Turbopack loads server-only packages (pg, bcryptjs, ...) through hashed aliases in
+// .next/node_modules, e.g. "pg-587764f78a6c7a9c" -> ../../node_modules/pg. Recreate them
+// as RELATIVE symlinks so they resolve on the server (cpSync would bake in this machine's
+// absolute paths). They point at the app's node_modules, which cPanel provides.
+const aliasDir = path.join(standalone, ".next", "node_modules");
+const outAliasDir = path.join(out, ".next", "node_modules");
+rmSync(outAliasDir, { recursive: true, force: true });
+if (existsSync(aliasDir)) {
+  mkdirSync(outAliasDir, { recursive: true });
+  for (const alias of readdirSync(aliasDir)) {
+    const src = path.join(aliasDir, alias);
+    if (!lstatSync(src).isSymbolicLink()) continue;
+    const target = path.basename(readlinkSync(src)); // e.g. "pg"
+    symlinkSync(`../../node_modules/${target}`, path.join(outAliasDir, alias));
+  }
+}
 cpSync(path.join(root, ".next", "static"), path.join(out, ".next", "static"), { recursive: true });
 cpSync(path.join(root, "public"), path.join(out, "public"), { recursive: true });
 cpSync(path.join(root, "drizzle"), path.join(out, "drizzle"), { recursive: true });
@@ -75,7 +91,7 @@ writeFileSync(
 );
 
 try {
-  execSync("zip -qr ../techbucket-site.zip .", { cwd: out, stdio: "inherit" });
+  execSync("zip -qry ../techbucket-site.zip .", { cwd: out, stdio: "inherit" });
   console.log("Bundle: deploy/techbucket-site.zip");
 } catch {
   console.log("Bundle folder ready: deploy/techbucket-site (zip it before uploading)");
