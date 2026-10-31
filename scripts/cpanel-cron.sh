@@ -104,6 +104,16 @@ install_packages() {
   return 1
 }
 
+report_health() {
+  local code
+  code="$(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/" || true)"
+  log "$1: HTTP $code from https://$DOMAIN"
+  if [ "$code" != "200" ] && [ -f "$APP_DIR/stderr.log" ]; then
+    log "Last lines of $APP_DIR/stderr.log:"
+    tail -n 40 "$APP_DIR/stderr.log"
+  fi
+}
+
 venv() {
   # cPanel's activate script uses unset variables, so relax strict mode while loading it.
   set +u
@@ -185,7 +195,7 @@ EOF
   cloudlinux-selector restart --json --interpreter nodejs --app-root "$APP_ROOT" >/dev/null
   echo "$NEW_SHA" > "$STATE/installed"
   sleep 5
-  log "Site started: HTTP $(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/" || true) from https://$DOMAIN"
+  report_health "Site started"
 }
 
 update() {
@@ -201,7 +211,7 @@ update() {
   cloudlinux-selector restart --json --interpreter nodejs --app-root "$APP_ROOT" >/dev/null
   echo "$NEW_SHA" > "$STATE/installed"
   sleep 5
-  log "Updated: HTTP $(curl -s -o /dev/null -w '%{http_code}' "https://$DOMAIN/" || true)"
+  report_health "Updated"
 }
 
 # Wrapped in main so bash reads the whole file before git updates it mid-run.
