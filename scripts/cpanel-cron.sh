@@ -76,6 +76,23 @@ sync_files() {
   fi
 }
 
+install_packages() {
+  # Try cPanel's installer first; if it fails, run npm directly inside the app's
+  # Node.js environment, skipping optional native packages the site doesn't need.
+  local out
+  if out="$(cloudlinux-selector install-modules --json --interpreter nodejs --app-root "$APP_ROOT" 2>&1)"; then
+    log "Packages installed."
+    return 0
+  fi
+  log "cPanel installer failed: $(echo "$out" | tr '\n' ' ' | cut -c1-600)"
+  log "Retrying with npm directly..."
+  ( venv
+    npm install --omit=dev --omit=optional --no-audit --no-fund --no-package-lock 2>&1 | tail -25
+    exit "${PIPESTATUS[0]}"
+  ) && { log "Packages installed with npm."; return 0; }
+  return 1
+}
+
 venv() {
   # shellcheck disable=SC1090
   source "$HOME/nodevenv/$APP_ROOT/$(cat "$STATE/node_version")/bin/activate"
@@ -133,7 +150,7 @@ EOF
     --app-root "$APP_ROOT" --domain "$DOMAIN" --app-uri / \
     --app-mode production --startup-file server.js >/dev/null || die "Couldn't create the Node.js app."
   log "Node.js app created; installing packages (several minutes)..."
-  cloudlinux-selector install-modules --json --interpreter nodejs --app-root "$APP_ROOT" >/dev/null || die "Package install failed."
+  install_packages || die "Package install failed (details above)."
   cp "$APP_DIR/package.json" "$STATE/package.json"
 
   # 5. Tables, content, admin login.
@@ -163,7 +180,7 @@ update() {
   cp "$STATE/env" "$APP_DIR/.env"
   if ! cmp -s "$APP_DIR/package.json" "$STATE/package.json"; then
     log "Dependencies changed; reinstalling packages..."
-    cloudlinux-selector install-modules --json --interpreter nodejs --app-root "$APP_ROOT" >/dev/null || die "Package install failed."
+    install_packages || die "Package install failed (details above)."
     cp "$APP_DIR/package.json" "$STATE/package.json"
   fi
   mkdir -p "$APP_DIR/tmp" && date > "$APP_DIR/tmp/restart.txt"
