@@ -43,7 +43,15 @@ main() {
 
   command -v git >/dev/null || die "git not found on this server."
   git -C "$BUILD_DIR" fetch -q --depth 1 origin "$BRANCH" || die "Couldn't fetch $BRANCH from GitHub."
+  local before after
+  before="$(git -C "$BUILD_DIR" rev-parse HEAD)"
   git -C "$BUILD_DIR" reset -q --hard "origin/$BRANCH"
+  after="$(git -C "$BUILD_DIR" rev-parse HEAD)"
+  # If this script itself was just updated, re-run the new version right away.
+  if [ "$before" != "$after" ] && [ -z "${TB_REEXEC:-}" ]; then
+    rmdir "$STATE/lock" 2>/dev/null; trap - EXIT
+    TB_REEXEC=1 exec bash "$BUILD_DIR/cpanel-cron.sh"
+  fi
   NEW_SHA="$(cat "$BUILD_DIR/BUILD_SHA" 2>/dev/null || git -C "$BUILD_DIR" rev-parse HEAD)"
 
   if [ ! -f "$STATE/installed" ]; then
