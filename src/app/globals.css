@@ -1,26 +1,129 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Inter Tight Variable", "Inter Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --color-ink: #111417;
+  --color-night: #0b0f12;
+  --color-deep: #0e1316;
+  --color-charcoal: #26323a;
+  --color-slate: #3e4a51;
+  --color-muted: #4a565d;
+  --color-subtle: #5c6870;
+  --color-line: #c9cfd3;
+  --color-line-dark: #3a454c;
+  --color-hair: #e3e6e8;
+  --color-mist: #f3f4f5;
+  --color-fog: #c9d0d4;
+  --color-accent: #e8622a;
+  --color-accent-ink: #b8431a;
+  --color-accent-soft: #f28a5b;
+  --color-accent-wash: #fce9df;
+
+  --container-site: 1360px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+  body {
+    @apply bg-white font-sans text-ink antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 3px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  .container-site {
+    @apply mx-auto w-full max-w-(--container-site) px-5 sm:px-8;
+  }
+  .eyebrow {
+    @apply text-[13px] font-semibold uppercase tracking-[0.16em] text-subtle sm:text-sm;
+  }
+  .h-display {
+    @apply font-display font-medium tracking-[-0.035em];
+    line-height: 0.98;
+  }
+  .h-section {
+    @apply font-display text-[clamp(2.25rem,4.6vw,4rem)] leading-[1.04] font-medium tracking-[-0.03em];
+  }
+  .btn-accent {
+    @apply inline-flex min-h-12 items-center gap-2.5 bg-accent px-7 py-4 text-base font-semibold text-ink transition-colors hover:bg-accent-soft;
+  }
+  .btn-ink {
+    @apply inline-flex min-h-12 items-center gap-2.5 bg-ink px-7 py-4 text-base font-semibold text-white transition-colors hover:bg-charcoal;
+  }
+  .link-underline {
+    @apply font-semibold underline decoration-1 underline-offset-[6px] transition-colors hover:decoration-2;
+  }
+
+  /* Long-form content rendered from Markdown */
+  .prose-tb {
+    @apply max-w-[720px] text-[18px] leading-[1.75] text-slate;
+  }
+  .prose-tb > * + * {
+    @apply mt-6;
+  }
+  .prose-tb h2 {
+    @apply mt-14 font-display text-[28px] leading-tight font-medium tracking-[-0.015em] text-ink sm:text-[32px];
+  }
+  .prose-tb h3 {
+    @apply mt-10 font-display text-2xl font-medium text-ink;
+  }
+  .prose-tb a {
+    @apply font-medium text-accent-ink underline underline-offset-4;
+  }
+  .prose-tb strong {
+    @apply font-semibold text-ink;
+  }
+  .prose-tb ul {
+    @apply list-none space-y-3 pl-0;
+  }
+  .prose-tb ul > li {
+    @apply relative pl-6;
+  }
+  .prose-tb ul > li::before {
+    content: "";
+    @apply absolute top-[0.7em] left-0 h-2 w-2 rounded-full bg-accent;
+  }
+  .prose-tb ol {
+    @apply list-decimal space-y-3 pl-6 marker:font-semibold marker:text-ink;
+  }
+  .prose-tb blockquote {
+    @apply border-l-0 font-display text-2xl leading-snug text-ink;
+  }
+  .prose-tb img {
+    @apply h-auto w-full;
+  }
+  .prose-tb code {
+    @apply bg-mist px-1.5 py-0.5 text-[0.9em];
+  }
+  .prose-tb table {
+    @apply w-full border-collapse text-base;
+  }
+  .prose-tb th,
+  .prose-tb td {
+    @apply border-b border-hair py-3 pr-4 text-left align-top;
+  }
 }
