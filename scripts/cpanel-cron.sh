@@ -72,16 +72,11 @@ check_server() {
 
 sync_files() {
   mkdir -p "$APP_DIR"
-  # Replace the app files but keep the server's own: .env, node_modules (cPanel link), logs.
-  if command -v rsync >/dev/null; then
-    rsync -a --delete \
-      --exclude '.git/' --exclude '.env' --exclude 'node_modules' --exclude 'stderr.log' \
-      --exclude 'BUILD_SHA' --exclude 'cpanel-cron.sh' \
-      "$BUILD_DIR/" "$APP_DIR/"
-  else
-    rm -rf "$APP_DIR/.next" "$APP_DIR/public" "$APP_DIR/drizzle" "$APP_DIR/scripts"
-    (cd "$BUILD_DIR" && tar cf - --exclude=.git --exclude=BUILD_SHA --exclude=cpanel-cron.sh .) | (cd "$APP_DIR" && tar xf -)
-  fi
+  # Replace the app's build folders, then copy the new files in. The server's own
+  # files (.env, node_modules link to cPanel's packages, stderr.log) are left alone.
+  rm -rf "$APP_DIR/.next" "$APP_DIR/public" "$APP_DIR/drizzle" "$APP_DIR/scripts"
+  (cd "$BUILD_DIR" && tar cf - --exclude=./.git --exclude=./BUILD_SHA --exclude=./cpanel-cron.sh .) \
+    | (cd "$APP_DIR" && tar xf -)
 }
 
 install_packages() {
@@ -112,6 +107,15 @@ report_health() {
     log "Last lines of $APP_DIR/stderr.log:"
     tail -n 40 "$APP_DIR/stderr.log"
   fi
+}
+
+check_links() {
+  local missing=0 l
+  for l in "$APP_DIR"/.next/node_modules/*; do
+    [ -e "$l" ] || { log "Broken module link: $l -> $(readlink "$l")"; missing=1; }
+  done
+  [ -d "$APP_DIR/.next/node_modules" ] || { log "Missing $APP_DIR/.next/node_modules"; missing=1; }
+  return $missing
 }
 
 venv() {
@@ -202,6 +206,7 @@ update() {
   log "Deploying new build $NEW_SHA"
   sync_files
   cp "$STATE/env" "$APP_DIR/.env"
+  check_links || log "Warning: module links incomplete (see above)."
   if ! cmp -s "$APP_DIR/package.json" "$STATE/package.json"; then
     log "Dependencies changed; reinstalling packages..."
     install_packages || die "Package install failed (details above)."
