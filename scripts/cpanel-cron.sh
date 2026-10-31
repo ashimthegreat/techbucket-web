@@ -88,7 +88,10 @@ install_packages() {
   # Try cPanel's installer first; if it fails, run npm directly inside the app's
   # Node.js environment, skipping optional native packages the site doesn't need.
   local out
-  if out="$(cloudlinux-selector install-modules --json --interpreter nodejs --app-root "$APP_ROOT" 2>&1)"; then
+  out="$(cloudlinux-selector install-modules --json --interpreter nodejs --app-root "$APP_ROOT" 2>&1)"
+  # cPanel test-loads the site afterwards; before the database is set up that test
+  # fails even though the install worked. Judge by whether the packages are there.
+  if [ -f "$APP_DIR/node_modules/next/package.json" ] && [ -f "$APP_DIR/node_modules/pg/package.json" ]; then
     log "Packages installed."
     return 0
   fi
@@ -102,8 +105,11 @@ install_packages() {
 }
 
 venv() {
+  # cPanel's activate script uses unset variables, so relax strict mode while loading it.
+  set +u
   # shellcheck disable=SC1090
   source "$HOME/nodevenv/$APP_ROOT/$(cat "$STATE/node_version")/bin/activate"
+  set -u
   cd "$APP_DIR"
 }
 
