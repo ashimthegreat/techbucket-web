@@ -13,6 +13,9 @@ concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: write   # to publish the build to the cpanel-build branch
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -42,7 +45,20 @@ jobs:
           path: deploy/techbucket-site.zip
           retention-days: 14
 
-      # ---- Deploy (only on main, only when FTP secrets are configured) ----
+      # ---- Publish the ready-to-run build for the cPanel cron job to pull ----
+      - name: Publish build to the cpanel-build branch
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        run: |
+          cd deploy/techbucket-site
+          cp ../../scripts/cpanel-cron.sh .
+          echo "$GITHUB_SHA" > BUILD_SHA
+          git init -q -b cpanel-build
+          git add -A
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -qm "Build of ${GITHUB_SHA::7}"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" cpanel-build
+
+      # ---- Optional: push over FTPS instead (only when FTP secrets are set) ----
       - name: Check deploy settings
         id: cfg
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
