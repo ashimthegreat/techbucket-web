@@ -9,6 +9,7 @@ import { db, schema } from "@/db";
 import { createSession, destroySession, requireUser, type SessionUser } from "@/lib/auth";
 import { CONTENT_TAG } from "@/lib/data";
 import { pingIndexNow } from "@/lib/indexnow";
+import { runHealthCheck } from "@/lib/health/run";
 import { rateLimit } from "@/lib/rate-limit";
 import { deleteUpload, saveImage } from "@/lib/uploads";
 import { slugify } from "@/lib/utils";
@@ -118,7 +119,14 @@ export async function loginAction(_prev: { error?: string; email?: string }, fd:
   const [u] = await db.select().from(schema.users).where(eq(schema.users.email, email));
   // Compare against a dummy hash when the user is missing to keep timing uniform.
   const ok = await bcrypt.compare(password, u?.passwordHash ?? "$2b$12$Ep6IeQTawmij.GJWF8G6But.lpCBHsppUtwNg6bVrrUm9CAjwpFfq");
-  if (!u || !ok || !u.active) return { email, error: "Incorrect email or password." };
+  if (!u || !ok || !u.active) {
+    // Counted by the weekly site health check to spot password guessing.
+    await db
+      .insert(schema.auditLog)
+      .values({ userId: u?.id ?? null, action: "login_failed", entity: "auth", entityId: email.slice(0, 80) })
+      .catch(() => {});
+    return { email, error: "Incorrect email or password." };
+  }
   await db.update(schema.users).set({ lastLoginAt: new Date() }).where(eq(schema.users.id, u.id));
   await createSession(u.id);
   redirect("/admin");
@@ -635,4 +643,13 @@ export async function deleteUser(fd: FormData) {
   await db.delete(schema.users).where(eq(schema.users.id, id));
   await audit(me, "delete", "user", id);
   redirect("/admin/users?saved=deleted");
+}
+
+/* ---------------- site health ---------------- */
+
+export async function runHealthNow() {
+  const user = await requireUser();
+  const run = await runHealthCheck("manual");
+  await audit(user, "run", "health", run?.id ?? null);
+  redirect(run ? "/admin/health?ran=1" : "/admin/health?busy=1");
 }

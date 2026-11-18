@@ -82,6 +82,18 @@ Then follow [DEPLOY-CPANEL.md](DEPLOY-CPANEL.md). After the first setup, pushes 
 - **`/llms.txt`**: plain-text map of the site for AI assistants, generated from the database.
 - **Sitemap dates** come from real edit times, so search engines can trust them.
 
+## Site health (weekly automatic audit)
+
+*Admin → Site health* shows scores for Content, SEO, Security and Operations, every problem found with how to fix it, and a history of past checks. The admin dashboard and menu show the score and the number of critical issues.
+
+- **Runs by itself once a week**: the cPanel deploy cron job (`cpanel-cron.sh`) backs up the database to `~/techbucket-backups` (newest 8 kept) and calls `POST /api/cron/health`. The call's token is derived from `SESSION_SECRET`, so there is nothing to configure. "Run check now" on the page runs it on demand.
+- **What it checks**:
+  - Content: thin pages, summaries, FAQs, stale pages, case studies, article freshness and length, drafts, expired jobs, missing logos.
+  - SEO: crawls every sitemap page for status, speed, titles, descriptions, H1, canonical, noindex, structured data, alt text, mixed content and broken links, plus robots.txt, sitemap, verification codes, local-business details and the www/https redirects.
+  - Security: SSL expiry, security headers, exposed files (.env, .git…), admin login guard, known vulnerabilities in installed packages (npm advisory database), Next.js and Node.js versions, unused admin accounts, failed sign-ins, leftover password file, settings-file permissions.
+  - Operations: enquiries waiting over 2 days, database backups, deploy errors, app error log, email alerts, storage.
+- **Email**: with SMTP set up, each weekly result is emailed to the "Send new enquiries to" address.
+
 ## Project structure
 
 ```

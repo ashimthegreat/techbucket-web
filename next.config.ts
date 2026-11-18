@@ -36,6 +36,8 @@ const nextConfig: NextConfig = {
       {
         source: "/:path*",
         headers: [
+          // Browsers only honour HSTS over HTTPS, so this is harmless in local development.
+          { key: "Strict-Transport-Security", value: "max-age=31536000" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "SAMEORIGIN" },

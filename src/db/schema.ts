@@ -281,6 +281,36 @@ export const auditLog = pgTable("audit_log", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 
+/* ---------- Site health checks (weekly automated audit) ---------- */
+export type HealthFinding = {
+  id: string;
+  category: "content" | "seo" | "security" | "operations";
+  severity: "critical" | "warning" | "info";
+  title: string;
+  detail?: string;
+  fix?: string;
+  href?: string;
+};
+export type HealthScores = { overall: number; content: number; seo: number; security: number; operations: number };
+
+export const healthRuns = pgTable(
+  "health_runs",
+  {
+    id: serial("id").primaryKey(),
+    trigger: varchar("trigger", { length: 20 }).notNull().default("schedule"),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    durationMs: integer("duration_ms"),
+    pagesChecked: integer("pages_checked").notNull().default(0),
+    scores: jsonb("scores").$type<HealthScores>(),
+    findings: jsonb("findings").$type<HealthFinding[]>().notNull().default([]),
+    passed: jsonb("passed").$type<{ category: HealthFinding["category"]; title: string }[]>().notNull().default([]),
+    error: text("error"),
+  },
+  (t) => [index("health_runs_started_idx").on(t.startedAt)],
+);
+
+export type HealthRun = typeof healthRuns.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type SiteSettings = typeof siteSettings.$inferSelect;
 export type Service = typeof services.$inferSelect;

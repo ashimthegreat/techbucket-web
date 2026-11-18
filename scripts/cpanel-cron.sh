@@ -8,6 +8,8 @@
 #     sets up tables/content, creates an admin login, starts the site;
 #   * later runs: if GitHub has a newer build, copies it in and restarts.
 #     Database changes are applied automatically when the app starts.
+#   * once a week: backs up the database to ~/techbucket-backups and starts the
+#     site health check (results in Admin → Site health).
 #
 # Output goes to ~/techbucket-deploy.log. Safe to run as often as you like.
 
@@ -58,6 +60,37 @@ main() {
     first_install
   elif [ "$NEW_SHA" != "$(cat "$STATE/installed")" ]; then
     update
+  fi
+  [ -f "$STATE/installed" ] && weekly
+}
+
+weekly() {
+  # Runs at most once every 7 days (the marker file's age decides).
+  if [ -f "$STATE/last_weekly" ] && [ -z "$(find "$STATE/last_weekly" -mmin +10070 2>/dev/null)" ]; then return 0; fi
+  touch "$STATE/last_weekly"
+  backup_database
+  local secret token code
+  secret="$(sed -n 's/^SESSION_SECRET=//p' "$STATE/env" | head -1)"
+  token="$(printf 'health:%s' "$secret" | openssl dgst -sha256 -r | cut -c1-64)"
+  code="$(curl -s -o /dev/null -w '%{http_code}' -m 30 -X POST -H "Authorization: Bearer $token" "https://$DOMAIN/api/cron/health" || true)"
+  if [ "$code" = "202" ]; then log "Weekly site health check started (see Admin → Site health)."
+  else log "ERROR: weekly site health check did not start (HTTP $code)."; fi
+}
+
+backup_database() {
+  local dir="$HOME/techbucket-backups" url file
+  mkdir -p "$dir" && chmod 700 "$dir"
+  url="$(sed -n 's/^DATABASE_URL=//p' "$STATE/env" | head -1)"
+  file="$dir/db-$(date +%Y%m%d-%H%M).sql.gz"
+  if ! command -v pg_dump >/dev/null; then log "ERROR: pg_dump not found; database not backed up."; return 0; fi
+  if pg_dump --no-owner --no-privileges "$url" 2>>"$dir/backup-errors.log" | gzip > "$file" && [ -s "$file" ] && gzip -t "$file"; then
+    chmod 600 "$file"
+    # Keep the newest 8 weekly backups.
+    ls -1t "$dir"/db-*.sql.gz 2>/dev/null | tail -n +9 | xargs -r rm -f
+    log "Database backed up to $file ($(du -h "$file" | cut -f1))."
+  else
+    rm -f "$file"
+    log "ERROR: database backup failed; see $dir/backup-errors.log"
   fi
 }
 

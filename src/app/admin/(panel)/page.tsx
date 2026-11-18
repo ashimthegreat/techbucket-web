@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { count, desc, eq, gte, sql } from "drizzle-orm";
+import { count, desc, eq, gte, isNotNull, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { Badge, Card, Flash } from "@/components/admin/ui";
@@ -10,7 +10,7 @@ type Props = { searchParams: Promise<{ denied?: string }> };
 export default async function Dashboard({ searchParams }: Props) {
   const user = await requireUser();
   const { denied } = await searchParams;
-  const [[leads30], [newLeads], [apps], [published], [openJobs], recentLeads, recentApps] = await Promise.all([
+  const [[leads30], [newLeads], [apps], [published], [openJobs], recentLeads, recentApps, [health]] = await Promise.all([
     db.select({ n: count() }).from(schema.leads).where(gte(schema.leads.createdAt, sql`now() - interval '30 days'`)),
     db.select({ n: count() }).from(schema.leads).where(eq(schema.leads.status, "new")),
     db.select({ n: count() }).from(schema.applications).where(eq(schema.applications.status, "new")),
@@ -23,7 +23,14 @@ export default async function Dashboard({ searchParams }: Props) {
       .leftJoin(schema.jobs, eq(schema.applications.jobId, schema.jobs.id))
       .orderBy(desc(schema.applications.createdAt))
       .limit(5),
+    db
+      .select()
+      .from(schema.healthRuns)
+      .where(isNotNull(schema.healthRuns.finishedAt))
+      .orderBy(desc(schema.healthRuns.startedAt))
+      .limit(1),
   ]);
+  const critical = health?.findings.filter((f) => f.severity === "critical") ?? [];
 
   const tiles = [
     { label: "New enquiries", value: newLeads.n, href: "/admin/leads?status=new", accent: newLeads.n > 0 },
@@ -49,6 +56,30 @@ export default async function Dashboard({ searchParams }: Props) {
           </Link>
         ))}
       </div>
+
+      <Link
+        href="/admin/health"
+        className="mb-8 flex flex-col gap-3 border border-hair bg-white p-5 hover:border-ink sm:flex-row sm:items-center sm:justify-between"
+      >
+        <span className="flex items-center gap-5">
+          <span
+            className={`font-display text-4xl font-semibold tracking-[-0.03em] ${
+              !health?.scores ? "text-subtle" : health.scores.overall >= 85 ? "text-emerald-700" : health.scores.overall >= 60 ? "text-amber-700" : "text-red-700"
+            }`}
+          >
+            {health?.scores?.overall ?? "–"}
+          </span>
+          <span>
+            <span className="block font-semibold">Site health</span>
+            <span className="block text-sm text-muted">
+              {health?.scores
+                ? `${critical.length} critical, ${health.findings.filter((f) => f.severity === "warning").length} to fix · checked ${formatDateTime(health.startedAt)}`
+                : "Not checked yet. Runs automatically every week."}
+            </span>
+          </span>
+        </span>
+        {critical[0] && <span className="text-sm font-semibold text-red-700 sm:max-w-[45%] sm:text-right">{critical[0].title}</span>}
+      </Link>
 
       <div className="grid gap-6 xl:grid-cols-[1.4fr_1fr]">
         <Card title="Latest enquiries">

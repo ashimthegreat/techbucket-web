@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { count, eq } from "drizzle-orm";
+import { count, desc, eq, isNotNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { AdminNav } from "@/components/admin/client";
@@ -14,10 +14,17 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const [[newLeads], [newApps]] = await Promise.all([
+  const [[newLeads], [newApps], [health]] = await Promise.all([
     db.select({ n: count() }).from(schema.leads).where(eq(schema.leads.status, "new")),
     db.select({ n: count() }).from(schema.applications).where(eq(schema.applications.status, "new")),
+    db
+      .select({ findings: schema.healthRuns.findings })
+      .from(schema.healthRuns)
+      .where(isNotNull(schema.healthRuns.finishedAt))
+      .orderBy(desc(schema.healthRuns.startedAt))
+      .limit(1),
   ]);
+  const critical = health?.findings.filter((f) => f.severity === "critical").length ?? 0;
 
   const groups = [
     {
@@ -26,6 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         { href: "/admin", label: "Dashboard" },
         { href: "/admin/leads", label: "Enquiries", badge: newLeads.n },
         { href: "/admin/applications", label: "Applications", badge: newApps.n },
+        { href: "/admin/health", label: "Site health", badge: critical },
       ],
     },
     {
