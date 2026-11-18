@@ -691,6 +691,8 @@ export async function saveEmailSettings(fd: FormData) {
   const port = int(fd, "smtpPort", 465);
   const smtpUser = str(fd, "smtpUser", 200).toLowerCase();
   const pass = String(fd.get("smtpPass") ?? "");
+  const fromAddress = str(fd, "smtpFromAddress", 200).toLowerCase();
+  if (fromAddress && !/^\S+@\S+\.\S+$/.test(fromAddress)) fail("/admin/settings#mail", "The Send from address must be an email address, e.g. noreply@techbucket.com.np.");
   if (host && !/^[a-z0-9.-]+$/.test(host)) fail("/admin/settings#mail", "The SMTP server name doesn't look right (e.g. smtppro.zoho.com).");
   if (smtpUser && !/^\S+@\S+\.\S+$/.test(smtpUser)) fail("/admin/settings#mail", "The username is the full email address, e.g. admin@techbucket.com.np.");
   await db
@@ -700,6 +702,7 @@ export async function saveEmailSettings(fd: FormData) {
       smtpPort: [25, 465, 587, 2525].includes(port) ? port : 465,
       smtpUser: smtpUser || null,
       smtpFromName: optStr(fd, "smtpFromName", 120),
+      smtpFromAddress: fromAddress && fromAddress !== smtpUser ? fromAddress : null,
       autoReply: bool(fd, "autoReply"),
       ...(bool(fd, "smtpClear") ? { smtpPassEnc: null } : pass ? { smtpPassEnc: seal(pass) } : {}),
     })
@@ -718,7 +721,7 @@ export async function sendTestEmail(fd: FormData) {
   if (!check.ok) fail("/admin/settings#mail", `Could not sign in to ${c.host}: ${check.error}`);
   const r = await sendMail({
     to,
-    subject: "Test email from techbucket.com.np",
+    subject: `Test email from ${c.fromAddress}`,
     text: `This is a test from the Tech Bucket website, sent by ${user.name}.\n\nIf you can read this, enquiry alerts, password resets and replies to clients will work.`,
     kind: "test",
     sentBy: user.id,

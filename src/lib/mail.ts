@@ -5,7 +5,16 @@ import { db, schema } from "@/db";
 import { open } from "@/lib/secret-box";
 import { siteUrl } from "@/lib/utils";
 
-export type MailConfig = { host: string; port: number; user: string; pass: string; fromName: string; source: "admin" | "env" };
+export type MailConfig = {
+  host: string;
+  port: number;
+  user: string;
+  pass: string;
+  fromName: string;
+  /** Sender address; may differ from the login (Zoho "Send mail as" / group address). */
+  fromAddress: string;
+  source: "admin" | "env";
+};
 
 /**
  * SMTP settings: from Admin → Site settings → Email when filled in, otherwise
@@ -16,12 +25,21 @@ export async function mailConfig(): Promise<MailConfig | null> {
   const [s] = await db.select().from(schema.siteSettings).where(eq(schema.siteSettings.id, 1));
   const pass = open(s?.smtpPassEnc);
   if (s?.smtpHost && s.smtpUser && pass) {
-    return { host: s.smtpHost, port: s.smtpPort || 465, user: s.smtpUser, pass, fromName: s.smtpFromName || s.companyName, source: "admin" };
+    return {
+      host: s.smtpHost,
+      port: s.smtpPort || 465,
+      user: s.smtpUser,
+      pass,
+      fromName: s.smtpFromName || s.companyName,
+      fromAddress: s.smtpFromAddress || s.smtpUser,
+      source: "admin",
+    };
   }
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM } = process.env;
   if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
     const name = SMTP_FROM?.match(/^"?([^"<]+?)"?\s*</)?.[1] ?? s?.companyName ?? "Tech Bucket";
-    return { host: SMTP_HOST, port: Number(SMTP_PORT ?? 465), user: SMTP_USER, pass: SMTP_PASS, fromName: name, source: "env" };
+    const address = SMTP_FROM?.match(/<([^>]+)>/)?.[1] ?? (SMTP_FROM?.includes("@") ? SMTP_FROM.trim() : SMTP_USER);
+    return { host: SMTP_HOST, port: Number(SMTP_PORT ?? 465), user: SMTP_USER, pass: SMTP_PASS, fromName: name, fromAddress: address, source: "env" };
   }
   return null;
 }
@@ -96,7 +114,9 @@ export async function sendMail(m: SendInput): Promise<{ ok: boolean; error?: str
   }
   try {
     await transport(c).sendMail({
-      from: { name: c.fromName, address: c.user },
+      from: { name: c.fromName, address: c.fromAddress },
+      // The login mailbox is the envelope sender, so bounces reach a real inbox.
+      envelope: { from: c.user, to: m.to },
       to: m.to,
       replyTo: m.replyTo,
       subject: m.subject,
@@ -106,7 +126,10 @@ export async function sendMail(m: SendInput): Promise<{ ok: boolean; error?: str
     await log("sent");
     return { ok: true };
   } catch (e) {
-    const error = (e as Error).message;
+    let error = (e as Error).message;
+    if (c.fromAddress !== c.user && /553|550|relay|not allowed|sender/i.test(error)) {
+      error += ` (${c.user} is not allowed to send as ${c.fromAddress}. In Zoho, add ${c.fromAddress} under Settings → Mail → Send Mail As for ${c.user}, or clear the "Send from" address.)`;
+    }
     console.error("[mail] failed:", error);
     await log("failed", error);
     return { ok: false, error };
@@ -114,9 +137,9 @@ export async function sendMail(m: SendInput): Promise<{ ok: boolean; error?: str
 }
 
 /** Internal notification (new enquiry, application, weekly report). */
-export async function notify(to: string | null | undefined, subject: string, text: string, kind = "notification") {
+export async function notify(to: string | null | undefined, subject: string, text: string, kind = "notification", replyTo?: string) {
   if (!to) return false;
-  return (await sendMail({ to, subject, text, kind })).ok;
+  return (await sendMail({ to, subject, text, kind, replyTo })).ok;
 }
 
 /** Checks the SMTP login without sending anything. */

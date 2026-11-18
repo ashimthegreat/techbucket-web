@@ -152,6 +152,14 @@ export default async function SettingsAdmin({ searchParams }: Props) {
                 />
                 {s.smtpPassEnc && <Checkbox name="smtpClear" label="Remove the saved password" />}
               </div>
+              <TextField
+                name="smtpFromAddress"
+                label="Send from"
+                type="email"
+                defaultValue={s.smtpFromAddress}
+                placeholder={s.smtpUser || "noreply@techbucket.com.np"}
+                hint="e.g. noreply@ group; blank = the username"
+              />
               <TextField name="smtpFromName" label="Sender name" defaultValue={s.smtpFromName} placeholder={s.companyName} hint="shown as the From name" />
             </div>
             <div className="mt-5">

@@ -1,0 +1,1 @@
+ALTER TABLE "site_settings" ADD COLUMN "smtp_from_address" varchar(200);

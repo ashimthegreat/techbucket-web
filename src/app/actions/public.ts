@@ -80,8 +80,9 @@ export async function submitLead(_prev: FormState, formData: FormData): Promise<
     await notify(
       settings.leadNotifyEmail,
       `New enquiry: ${data.name}${data.organisation ? ` (${data.organisation})` : ""}`,
-      `Name: ${data.name}\nOrganisation: ${data.organisation}\nEmail: ${data.email}\nPhone: ${data.phone}\nInterest: ${data.service}\nSource: ${data.source}\n\n${data.message}\n\nOpen in admin: ${siteUrl(`/admin/leads/${leadId}`)}`,
+      `Reply to this email to answer ${data.name} directly.\n\nName: ${data.name}\nOrganisation: ${data.organisation}\nEmail: ${data.email}\nPhone: ${data.phone}\nInterest: ${data.service}\nSource: ${data.source}\n\n${data.message}\n\nOpen in admin: ${siteUrl(`/admin/leads/${leadId}`)}`,
       "lead_alert",
+      data.email,
     );
     if (settings.autoReply) {
       await sendMail({
@@ -151,6 +152,7 @@ export async function submitApplication(_prev: FormState, formData: FormData): P
       `New application: ${data.name} — ${jobTitle}`,
       `${data.name} <${data.email}> applied for ${jobTitle}.\n\nReview in admin: ${siteUrl("/admin/applications")}`,
       "application_alert",
+      data.email,
     );
     if (settings.autoReply) {
       await sendMail({

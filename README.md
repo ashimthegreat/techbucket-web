@@ -84,7 +84,7 @@ Then follow [DEPLOY-CPANEL.md](DEPLOY-CPANEL.md). After the first setup, pushes 
 
 ## Email (Zoho or any SMTP)
 
-Set it up in *Admin → Site settings → Email*: SMTP server (Zoho: `smtppro.zoho.com`, or `.in`/`.eu` for those data centres, port 465), the mailbox address as username, and its password (a Zoho **app password** is recommended). The password is stored encrypted (AES-256-GCM, key derived from `SESSION_SECRET`), never in the code. Use "Send test" to check it. If nothing is set there, the `SMTP_*` lines in `.env` are used.
+Set it up in *Admin → Site settings → Email*: SMTP server (Zoho: `smtppro.zoho.com`, or `.in`/`.eu` for those data centres, port 465), the mailbox address as username, its password, and optionally a separate *Send from* address (e.g. a `noreply@` group the mailbox may send as; the mailbox stays the envelope sender so bounces reach it) (a Zoho **app password** is recommended). The password is stored encrypted (AES-256-GCM, key derived from `SESSION_SECRET`), never in the code. Use "Send test" to check it. If nothing is set there, the `SMTP_*` lines in `.env` are used.
 
 What it sends, all logged under *Recent emails*:
 - New enquiry and job application alerts to "Send new enquiries to"

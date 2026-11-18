@@ -102,6 +102,8 @@ export const siteSettings = pgTable("site_settings", {
   smtpUser: varchar("smtp_user", { length: 200 }),
   smtpPassEnc: text("smtp_pass_enc"),
   smtpFromName: varchar("smtp_from_name", { length: 120 }),
+  // Address emails are sent from (e.g. a noreply@ group the SMTP user may send as). Defaults to smtpUser.
+  smtpFromAddress: varchar("smtp_from_address", { length: 200 }),
   autoReply: boolean("auto_reply").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()

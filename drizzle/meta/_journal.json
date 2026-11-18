@@ -29,6 +29,13 @@
       "when": 1794997149685,
       "tag": "0003_email",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794998321830,
+      "tag": "0004_smtp_from",
+      "breakpoints": true
     }
   ]
 }
