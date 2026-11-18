@@ -78,7 +78,17 @@ export function PostArticle({ post, section }: { post: PublicPost; section: { hr
         lede={post.excerpt || undefined}
       >
         <p className="mt-8 text-sm text-fog">
-          {formatDate(post.publishedAt)} · {post.readMinutes} min read
+          {post.author && (
+            <>
+              By {post.author.name}
+              {post.author.jobTitle ? `, ${post.author.jobTitle}` : ""} ·{" "}
+            </>
+          )}
+          <time dateTime={post.publishedAt ?? undefined}>{formatDate(post.publishedAt)}</time>
+          {post.updatedAt && post.publishedAt && new Date(post.updatedAt).getTime() - new Date(post.publishedAt).getTime() > 86400000 && (
+            <> · Updated <time dateTime={post.updatedAt}>{formatDate(post.updatedAt)}</time></>
+          )}{" "}
+          · {post.readMinutes} min read
         </p>
       </PageHero>
       {post.coverUrl && (
@@ -109,7 +119,15 @@ export function PostArticle({ post, section }: { post: PublicPost; section: { hr
           mainEntityOfPage: url,
           url,
           image: post.coverUrl ? siteUrl(post.coverUrl) : siteUrl("/opengraph-image"),
-          author: { "@id": siteUrl("/#organization") },
+          author: post.author
+            ? {
+                "@type": "Person",
+                name: post.author.name,
+                ...(post.author.jobTitle ? { jobTitle: post.author.jobTitle } : {}),
+                worksFor: { "@id": siteUrl("/#organization") },
+              }
+            : { "@id": siteUrl("/#organization") },
+          ...(post.type === "case_study" && post.clientName ? { about: { "@type": "Organization", name: post.clientName } } : {}),
           publisher: { "@id": siteUrl("/#organization") },
         }}
       />

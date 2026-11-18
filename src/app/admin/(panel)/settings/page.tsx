@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireUser } from "@/lib/auth";
-import { Card, Flash, PageHeader, TextArea, TextField } from "@/components/admin/ui";
+import { Card, Checkbox, Flash, PageHeader, TextArea, TextField } from "@/components/admin/ui";
 import { SubmitButton } from "@/components/admin/client";
 import { saveSettings } from "../../actions";
 
@@ -54,8 +54,18 @@ export default async function SettingsAdmin({ searchParams }: Props) {
         </Card>
         <Card title="Social profiles">
           <div className="grid gap-5 md:grid-cols-2">
-            {(["linkedin", "facebook", "x", "youtube", "instagram"] as const).map((k) => (
-              <TextField key={k} name={`social_${k}`} label={k === "x" ? "X (Twitter)" : k[0].toUpperCase() + k.slice(1)} type="url" defaultValue={socials[k]} placeholder="https://" />
+            {(
+              [
+                ["google", "Google Business Profile"],
+                ["linkedin", "LinkedIn"],
+                ["facebook", "Facebook"],
+                ["youtube", "YouTube"],
+                ["instagram", "Instagram"],
+                ["x", "X (Twitter)"],
+                ["tiktok", "TikTok"],
+              ] as const
+            ).map(([k, label]) => (
+              <TextField key={k} name={`social_${k}`} label={label} type="url" defaultValue={socials[k]} placeholder="https://" />
             ))}
           </div>
         </Card>
@@ -63,6 +73,40 @@ export default async function SettingsAdmin({ searchParams }: Props) {
           <div className="grid gap-5">
             <TextField name="defaultSeoTitle" label="Homepage title" defaultValue={s.defaultSeoTitle} hint="~60 characters" />
             <TextArea name="defaultSeoDescription" label="Homepage description" defaultValue={s.defaultSeoDescription} rows={3} hint="~155 characters" />
+          </div>
+        </Card>
+        <Card title="Search engines & AI search">
+          <div className="grid gap-5 md:grid-cols-2">
+            <TextField
+              name="googleVerification"
+              label="Google Search Console code"
+              defaultValue={s.googleVerification}
+              hint="paste the HTML tag or just the code"
+            />
+            <TextField
+              name="bingVerification"
+              label="Bing Webmaster Tools code"
+              defaultValue={s.bingVerification}
+              hint="paste the HTML tag or just the code"
+            />
+            <TextField name="latitude" label="Office latitude" defaultValue={s.latitude} placeholder="27.7339" hint="from Google Maps" />
+            <TextField name="longitude" label="Office longitude" defaultValue={s.longitude} placeholder="85.3002" />
+            <TextField
+              name="openingHours"
+              label="Opening hours"
+              defaultValue={s.openingHours}
+              placeholder="Su-Fr 09:30-17:30"
+              hint="days Su Mo Tu We Th Fr Sa; separate groups with a comma"
+            />
+            <TextField name="mapUrl" label="Google Maps link" type="url" defaultValue={s.mapUrl} placeholder="https://maps.app.goo.gl/…" />
+          </div>
+          <div className="mt-5">
+            <Checkbox
+              name="allowAiTraining"
+              label="Let AI companies learn about Tech Bucket from this site (GPTBot, ClaudeBot, Google-Extended…)"
+              defaultChecked={s.allowAiTraining}
+              hint="AI search engines (ChatGPT search, Claude, Perplexity, Copilot, Google AI Overviews) can always read and cite the site; this only controls collection for training AI models."
+            />
           </div>
         </Card>
         <div className="sticky bottom-0 -mx-5 border-t border-hair bg-white/95 px-5 py-4 sm:-mx-8 sm:px-8">

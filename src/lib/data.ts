@@ -17,11 +17,13 @@ const {
   featuredItems,
   posts,
   jobs,
+  users,
 } = schema;
 
 export type PublicPost = Omit<schema.Post, "publishedAt" | "createdAt" | "updatedAt"> & {
   publishedAt: string | null;
   updatedAt: string;
+  author?: { name: string; jobTitle: string | null } | null;
 };
 
 function serialisePost(p: schema.Post): PublicPost {
@@ -152,10 +154,15 @@ export const getPosts = unstable_cache(
 export const getPost = unstable_cache(
   async (type: "insight" | "case_study", slug: string) => {
     const [row] = await db
-      .select()
+      .select({ post: posts, authorName: users.name, authorTitle: users.jobTitle })
       .from(posts)
+      .leftJoin(users, eq(users.id, posts.authorId))
       .where(and(eq(posts.type, type), eq(posts.slug, slug), eq(posts.status, "published")));
-    return row ? serialisePost(row) : null;
+    if (!row) return null;
+    return {
+      ...serialisePost(row.post),
+      author: row.authorName ? { name: row.authorName, jobTitle: row.authorTitle } : null,
+    };
   },
   ["post"],
   opts,

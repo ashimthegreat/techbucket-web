@@ -6,7 +6,7 @@ import { CtaBand, Dot, JsonLd, PageHero } from "@/components/site/sections";
 import { LeadForm } from "@/components/site/forms";
 import { getService, getServices, getSettings } from "@/lib/data";
 import { plainText, renderMarkdown } from "@/lib/markdown";
-import { breadcrumbJsonLd, pageMetadata } from "@/lib/seo";
+import { breadcrumbJsonLd, faqJsonLd, pageMetadata } from "@/lib/seo";
 import { siteUrl } from "@/lib/utils";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -62,11 +62,32 @@ export default async function ServicePage({ params }: Props) {
         </div>
       </section>
 
+      {service.faqs.length > 0 && (
+        <section className="border-t border-hair bg-white" aria-labelledby="faq-heading">
+          <div className="container-site flex flex-col gap-12 py-20 sm:py-24 lg:flex-row lg:gap-24">
+            <div className="min-w-0 lg:flex-[0_1_380px]">
+              <p className="eyebrow mb-5">FAQ</p>
+              <h2 id="faq-heading" className="h-section text-[clamp(2rem,3.6vw,3rem)]">
+                Frequently asked questions<Dot />
+              </h2>
+            </div>
+            <div className="min-w-0 border-t border-ink lg:flex-[1_1_720px]">
+              {service.faqs.map((f) => (
+                <div key={f.q} className="border-b border-line py-7">
+                  <h3 className="font-display text-xl leading-snug font-medium sm:text-2xl">{f.q}</h3>
+                  <p className="mt-3 text-lg leading-relaxed whitespace-pre-line text-muted">{f.a}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="bg-mist">
         <div className="container-site flex flex-col gap-14 py-20 sm:py-28 lg:flex-row lg:gap-24">
           <div className="min-w-0 lg:flex-[1_1_380px]">
             <p className="eyebrow mb-5">Get started</p>
-            <h2 className="h-section text-[clamp(2rem,3.6vw,3rem)]">Discuss {service.title.toLowerCase()} with our team<Dot /></h2>
+            <h2 className="h-section text-[clamp(2rem,3.6vw,3rem)]">Talk to us about {service.title}<Dot /></h2>
             <p className="mt-6 text-lg leading-relaxed text-muted">
               Tell us what you need. We&apos;ll reply within one working day — or call {settings.phonePrimary}.
             </p>
@@ -108,6 +129,7 @@ export default async function ServicePage({ params }: Props) {
           areaServed: { "@type": "Country", name: "Nepal" },
         }}
       />
+      {service.faqs.length > 0 && <JsonLd data={faqJsonLd(service.faqs)} />}
       <JsonLd
         data={breadcrumbJsonLd([
           { name: "Home", path: "/" },

@@ -2,11 +2,22 @@ import { SiteHeader } from "@/components/site/header";
 import { SiteFooter } from "@/components/site/footer";
 import { JsonLd } from "@/components/site/sections";
 import { getIndustries, getServices, getSettings } from "@/lib/data";
+import type { Metadata } from "next";
 import { organizationJsonLd } from "@/lib/seo";
 
 // Render at request time from cached database content, so builds never
 // need a database and admin edits appear immediately.
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata(): Promise<Metadata> {
+  const s = await getSettings();
+  return {
+    verification: {
+      ...(s.googleVerification ? { google: s.googleVerification } : {}),
+      ...(s.bingVerification ? { other: { "msvalidate.01": s.bingVerification } } : {}),
+    },
+  };
+}
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const [settings, services, industries, org] = await Promise.all([

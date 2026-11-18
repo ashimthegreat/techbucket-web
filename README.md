@@ -73,6 +73,15 @@ npm run package:cpanel        # builds and creates deploy/techbucket-site.zip
 
 Then follow [DEPLOY-CPANEL.md](DEPLOY-CPANEL.md). After the first setup, pushes to `main` deploy automatically through GitHub Actions (see "Automatic deploys from GitHub" in that guide). In production, pending database migrations run automatically when the app starts (set `AUTO_MIGRATE=false` to turn this off).
 
+## Search engines & AI search
+
+- **robots.txt** lets AI search bots (ChatGPT search, Claude, Perplexity, Copilot/Bing, Google, Apple) read and cite the site. Training bots (GPTBot, ClaudeBot, Google-Extended, …) are allowed by default; switch that off under *Admin → Site settings → Search engines & AI search*.
+- **IndexNow**: every admin save tells Bing/IndexNow which pages changed (live HTTPS site only). The key is served at `/indexnow-key.txt` and derived from `SESSION_SECRET` (or set `INDEXNOW_KEY`; `INDEXNOW_DISABLED=true` turns it off).
+- **Verification**: paste the Google Search Console and Bing Webmaster Tools HTML tags in Site settings, then submit `/sitemap.xml` in both.
+- **Structured data**: company (Organization + ProfessionalService with address, map position, opening hours), WebSite, Service, FAQPage (service FAQs), Article/BlogPosting with the author's name and job title, JobPosting, BreadcrumbList.
+- **`/llms.txt`**: plain-text map of the site for AI assistants, generated from the database.
+- **Sitemap dates** come from real edit times, so search engines can trust them.
+
 ## Project structure
 
 ```

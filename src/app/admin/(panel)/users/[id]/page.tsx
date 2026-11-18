@@ -24,6 +24,7 @@ export default async function EditUser({ params, searchParams }: Props) {
           <div className="space-y-5">
             <TextField name="name" label="Name" defaultValue={row?.name} required />
             <TextField name="email" label="Email" type="email" defaultValue={row?.email} required />
+            <TextField name="jobTitle" label="Job title" defaultValue={row?.jobTitle} hint="shown as the author of articles, e.g. Managing Director" />
             <SelectField name="role" label="Role" defaultValue={row?.role ?? "editor"} options={[{ value: "editor", label: "Editor" }, { value: "admin", label: "Admin" }]} />
             <TextField name="password" label={isNew ? "Password" : "New password"} type="password" required={isNew} hint={isNew ? "at least 10 characters" : "leave blank to keep"} />
             <Checkbox name="active" label="Active" defaultChecked={row?.active ?? true} hint="Disabled users can't sign in" />

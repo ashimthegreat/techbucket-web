@@ -21,7 +21,7 @@
     "drizzle-orm": "^0.45.4",
     "jose": "^6.2.14",
     "marked": "^18.1.2",
-    "next": "16.4.3",
+    "next": "16.4.6",
     "nodemailer": "^10.3.1",
     "pg": "^8.23.1",
     "react": "19.3.0",
@@ -38,13 +38,13 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/sanitize-html": "^2.16.2",
+    "dotenv": "^18.0.9",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9",
-    "eslint-config-next": "16.4.3",
+    "eslint-config-next": "16.4.6",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
-    "typescript": "^5",
-    "dotenv": "^18.0.9"
+    "typescript": "^5"
   },
   "description": "Tech Bucket corporate website and admin panel (Next.js + PostgreSQL)",
   "engines": {

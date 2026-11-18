@@ -54,6 +54,7 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 200 }).notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   role: roleEnum("role").notNull().default("editor"),
+  jobTitle: varchar("job_title", { length: 120 }),
   active: boolean("active").notNull().default(true),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   ...timestamps,
@@ -85,6 +86,14 @@ export const siteSettings = pgTable("site_settings", {
   socials: jsonb("socials").$type<Record<string, string>>().notNull().default({}),
   defaultSeoTitle: varchar("default_seo_title", { length: 200 }).notNull(),
   defaultSeoDescription: varchar("default_seo_description", { length: 320 }).notNull(),
+  // Search engines & AI search
+  googleVerification: varchar("google_verification", { length: 200 }),
+  bingVerification: varchar("bing_verification", { length: 200 }),
+  latitude: varchar("latitude", { length: 30 }),
+  longitude: varchar("longitude", { length: 30 }),
+  openingHours: varchar("opening_hours", { length: 200 }),
+  mapUrl: text("map_url"),
+  allowAiTraining: boolean("allow_ai_training").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull()
@@ -99,6 +108,7 @@ export const services = pgTable("services", {
   summary: text("summary").notNull(),
   body: text("body").notNull().default(""),
   highlights: jsonb("highlights").$type<string[]>().notNull().default([]),
+  faqs: jsonb("faqs").$type<{ q: string; a: string }[]>().notNull().default([]),
   sortOrder: integer("sort_order").notNull().default(0),
   published: boolean("published").notNull().default(true),
   ...seo,

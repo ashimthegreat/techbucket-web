@@ -31,7 +31,9 @@ export function renderMarkdown(md: string): string {
 /** Plain-text excerpt for meta descriptions. */
 export function plainText(md: string, max = 160) {
   const text = (md ?? "")
-    .replace(/[#>*_`\[\]()!-]/g, " ")
+    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1") // links and images -> their text
+    .replace(/^\s*(?:[-+*]|\d+\.)\s+/gm, "") // list markers
+    .replace(/[#>*_`]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   return text.length > max ? `${text.slice(0, max - 1).trimEnd()}…` : text;

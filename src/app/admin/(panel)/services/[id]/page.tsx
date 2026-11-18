@@ -25,9 +25,25 @@ export default async function EditService({ params, searchParams }: Props) {
           <Card>
             <div className="space-y-5">
               <TextField name="title" label="Title" defaultValue={row?.title} required />
-              <TextArea name="summary" label="Summary" defaultValue={row?.summary} rows={3} hint="Shown on cards and as the page intro." />
+              <TextArea
+                name="summary"
+                label="Summary"
+                defaultValue={row?.summary}
+                rows={3}
+                hint="Shown on cards and as the page intro. Answer “what is it and who is it for” in 2–3 plain sentences — search engines and AI assistants quote this."
+              />
               <TextArea name="body" label="Page content" defaultValue={row?.body} rows={18} hint={markdownHint} mono />
             </div>
+          </Card>
+          <Card title="Frequently asked questions">
+            <TextArea
+              name="faqs"
+              label="Questions and answers"
+              defaultValue={(row?.faqs ?? []).map((f) => `${f.q}\n${f.a}`).join("\n\n")}
+              rows={12}
+              hint="Question on the first line, answer below it; leave a blank line between questions. Shown on the page and marked up for Google and AI search."
+              placeholder={"How long does a CCTV installation take?\nMost office installations take 2–5 working days…\n\nDo you provide maintenance?\nYes — …"}
+            />
           </Card>
           <SeoFields title={row?.seoTitle} description={row?.seoDescription} />
         </div>

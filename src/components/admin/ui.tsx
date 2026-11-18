@@ -167,6 +167,7 @@ export function TextArea({
   required,
   className,
   mono,
+  placeholder,
 }: {
   name: string;
   label: string;
@@ -176,6 +177,7 @@ export function TextArea({
   required?: boolean;
   className?: string;
   mono?: boolean;
+  placeholder?: string;
 }) {
   return (
     <div className={className}>
@@ -188,6 +190,7 @@ export function TextArea({
         name={name}
         rows={rows}
         required={required}
+        placeholder={placeholder}
         defaultValue={defaultValue ?? ""}
         className={cn(inputCls, "resize-y leading-relaxed", mono && "font-mono text-[13px]")}
       />

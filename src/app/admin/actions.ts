@@ -2,11 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { updateTag } from "next/cache";
+import { after } from "next/server";
 import { and, eq, ne } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 import { db, schema } from "@/db";
 import { createSession, destroySession, requireUser, type SessionUser } from "@/lib/auth";
 import { CONTENT_TAG } from "@/lib/data";
+import { pingIndexNow } from "@/lib/indexnow";
 import { rateLimit } from "@/lib/rate-limit";
 import { deleteUpload, saveImage } from "@/lib/uploads";
 import { slugify } from "@/lib/utils";
@@ -65,8 +67,10 @@ async function imageFromForm(fd: FormData, name: string, user: SessionUser): Pro
   return optStr(fd, name, 500);
 }
 
-function contentChanged() {
+/** Refresh cached pages, then tell Bing/IndexNow which public URLs changed (after the response). */
+function contentChanged(paths: string[] = []) {
   updateTag(CONTENT_TAG);
+  if (paths.length) after(() => pingIndexNow(["/sitemap.xml", "/llms.txt", ...paths]));
 }
 
 function fail(path: string, message: string): never {
@@ -76,6 +80,31 @@ function fail(path: string, message: string): never {
 function isUniqueViolation(e: unknown) {
   const err = e as { code?: string; cause?: { code?: string } };
   return err?.code === "23505" || err?.cause?.code === "23505";
+}
+
+/** Accepts either the bare code or the whole <meta ... content="CODE"> tag the search console shows. */
+function verificationCode(raw: string): string | null {
+  const fromTag = raw.match(/content=["']([^"']+)["']/i);
+  const code = (fromTag ? fromTag[1] : raw).trim();
+  return /^[A-Za-z0-9_\-:.]{6,200}$/.test(code) ? code : null;
+}
+
+function coord(raw: string, limit: number): string | null {
+  const n = Number(raw);
+  return raw !== "" && Number.isFinite(n) && Math.abs(n) <= limit ? String(n) : null;
+}
+
+/** "Question?\nAnswer…" blocks separated by a blank line. */
+function faqBlocks(raw: string): { q: string; a: string }[] {
+  return raw
+    .replace(/\r/g, "")
+    .split(/\n\s*\n/)
+    .map((block) => {
+      const [first, ...rest] = block.trim().split("\n");
+      return { q: (first ?? "").replace(/^Q[:.]\s*/i, "").trim(), a: rest.join("\n").replace(/^A[:.]\s*/i, "").trim() };
+    })
+    .filter((f) => f.q && f.a)
+    .slice(0, 20);
 }
 
 /* ---------------- auth ---------------- */
@@ -119,7 +148,7 @@ export async function changePasswordAction(fd: FormData) {
 export async function saveSettings(fd: FormData) {
   const user = await requireUser("admin");
   const socials: Record<string, string> = {};
-  for (const k of ["linkedin", "facebook", "x", "youtube", "instagram"]) {
+  for (const k of ["linkedin", "facebook", "x", "youtube", "instagram", "google", "tiktok"]) {
     const v = str(fd, `social_${k}`, 300);
     if (v) socials[k] = v;
   }
@@ -147,13 +176,20 @@ export async function saveSettings(fd: FormData) {
     socials,
     defaultSeoTitle: str(fd, "defaultSeoTitle", 200),
     defaultSeoDescription: str(fd, "defaultSeoDescription", 320),
+    googleVerification: verificationCode(str(fd, "googleVerification", 400)),
+    bingVerification: verificationCode(str(fd, "bingVerification", 400)),
+    latitude: coord(str(fd, "latitude", 30), 90),
+    longitude: coord(str(fd, "longitude", 30), 180),
+    openingHours: optStr(fd, "openingHours", 200),
+    mapUrl: optStr(fd, "mapUrl", 1000),
+    allowAiTraining: bool(fd, "allowAiTraining"),
   };
   if (!values.companyName || !values.heroTitle || !values.email || !values.phonePrimary) {
     fail("/admin/settings", "Company name, hero title, email and primary phone are required.");
   }
   await db.update(schema.siteSettings).set(values).where(eq(schema.siteSettings.id, 1));
   await audit(user, "update", "settings", 1);
-  contentChanged();
+  contentChanged(["/", "/about", "/contact"]);
   redirect("/admin/settings?saved=1");
 }
 
@@ -171,6 +207,7 @@ export async function saveService(fd: FormData) {
     summary: str(fd, "summary", 1000),
     body: str(fd, "body"),
     highlights: lines(fd, "highlights"),
+    faqs: faqBlocks(str(fd, "faqs", 20000)),
     sortOrder: int(fd, "sortOrder"),
     published: bool(fd, "published"),
     seoTitle: optStr(fd, "seoTitle", 200),
@@ -184,7 +221,7 @@ export async function saveService(fd: FormData) {
     throw e;
   }
   await audit(user, id ? "update" : "create", "service", id);
-  contentChanged();
+  contentChanged(["/", "/services", `/services/${values.slug}`]);
   redirect("/admin/services?saved=1");
 }
 
@@ -193,7 +230,7 @@ export async function deleteService(fd: FormData) {
   const id = Number(str(fd, "id"));
   await db.delete(schema.services).where(eq(schema.services.id, id));
   await audit(user, "delete", "service", id);
-  contentChanged();
+  contentChanged(["/services"]);
   redirect("/admin/services?saved=deleted");
 }
 
@@ -224,7 +261,7 @@ export async function saveIndustry(fd: FormData) {
     throw e;
   }
   await audit(user, id ? "update" : "create", "industry", id);
-  contentChanged();
+  contentChanged(["/industries", `/industries/${values.slug}`]);
   redirect("/admin/industries?saved=1");
 }
 
@@ -233,7 +270,7 @@ export async function deleteIndustry(fd: FormData) {
   const id = Number(str(fd, "id"));
   await db.delete(schema.industries).where(eq(schema.industries.id, id));
   await audit(user, "delete", "industry", id);
-  contentChanged();
+  contentChanged(["/industries"]);
   redirect("/admin/industries?saved=deleted");
 }
 
@@ -263,7 +300,7 @@ export async function saveClient(fd: FormData) {
   if (id) await db.update(schema.clients).set(values).where(eq(schema.clients.id, id));
   else await db.insert(schema.clients).values(values);
   await audit(user, id ? "update" : "create", "client", id);
-  contentChanged();
+  contentChanged(["/", "/about"]);
   redirect("/admin/clients?saved=1");
 }
 
@@ -272,7 +309,7 @@ export async function deleteClient(fd: FormData) {
   const id = Number(str(fd, "id"));
   await db.delete(schema.clients).where(eq(schema.clients.id, id));
   await audit(user, "delete", "client", id);
-  contentChanged();
+  contentChanged(["/", "/about"]);
   redirect("/admin/clients?saved=deleted");
 }
 
@@ -300,7 +337,7 @@ export async function savePartner(fd: FormData) {
   if (id) await db.update(schema.partners).set(values).where(eq(schema.partners.id, id));
   else await db.insert(schema.partners).values(values);
   await audit(user, id ? "update" : "create", "partner", id);
-  contentChanged();
+  contentChanged(["/", "/about"]);
   redirect("/admin/partners?saved=1");
 }
 
@@ -309,7 +346,7 @@ export async function deletePartner(fd: FormData) {
   const id = Number(str(fd, "id"));
   await db.delete(schema.partners).where(eq(schema.partners.id, id));
   await audit(user, "delete", "partner", id);
-  contentChanged();
+  contentChanged(["/", "/about"]);
   redirect("/admin/partners?saved=deleted");
 }
 
@@ -329,7 +366,7 @@ export async function saveStat(fd: FormData) {
   if (id) await db.update(schema.stats).set(values).where(eq(schema.stats.id, id));
   else await db.insert(schema.stats).values(values);
   await audit(user, id ? "update" : "create", "stat", id);
-  contentChanged();
+  contentChanged(["/"]);
   redirect("/admin/homepage?saved=1");
 }
 
@@ -338,7 +375,7 @@ export async function deleteStat(fd: FormData) {
   const id = Number(str(fd, "id"));
   await db.delete(schema.stats).where(eq(schema.stats.id, id));
   await audit(user, "delete", "stat", id);
-  contentChanged();
+  contentChanged(["/"]);
   redirect("/admin/homepage?saved=deleted");
 }
 
@@ -358,7 +395,7 @@ export async function saveFeatured(fd: FormData) {
   if (id) await db.update(schema.featuredItems).set(values).where(eq(schema.featuredItems.id, id));
   else await db.insert(schema.featuredItems).values(values);
   await audit(user, id ? "update" : "create", "featured", id);
-  contentChanged();
+  contentChanged(["/"]);
   redirect("/admin/homepage?saved=1");
 }
 
@@ -367,7 +404,7 @@ export async function deleteFeatured(fd: FormData) {
   const id = Number(str(fd, "id"));
   await db.delete(schema.featuredItems).where(eq(schema.featuredItems.id, id));
   await audit(user, "delete", "featured", id);
-  contentChanged();
+  contentChanged(["/"]);
   redirect("/admin/homepage?saved=deleted");
 }
 
@@ -421,7 +458,7 @@ export async function savePost(fd: FormData) {
     throw e;
   }
   await audit(user, id ? "update" : "create", "post", newId);
-  contentChanged();
+  contentChanged(status === "published" ? ["/", type === "case_study" ? "/case-studies" : "/insights", `/${type === "case_study" ? "case-studies" : "insights"}/${values.slug}`] : []);
   redirect(`/admin/posts/${newId}?saved=1`);
 }
 
@@ -430,7 +467,7 @@ export async function deletePost(fd: FormData) {
   const id = Number(str(fd, "id"));
   await db.delete(schema.posts).where(eq(schema.posts.id, id));
   await audit(user, "delete", "post", id);
-  contentChanged();
+  contentChanged(["/insights", "/case-studies"]);
   redirect("/admin/posts?saved=deleted");
 }
 
@@ -462,7 +499,7 @@ export async function saveJob(fd: FormData) {
     throw e;
   }
   await audit(user, id ? "update" : "create", "job", id);
-  contentChanged();
+  contentChanged(["/careers", `/careers/${values.slug}`]);
   redirect("/admin/jobs?saved=1");
 }
 
@@ -471,7 +508,7 @@ export async function deleteJob(fd: FormData) {
   const id = Number(str(fd, "id"));
   await db.delete(schema.jobs).where(eq(schema.jobs.id, id));
   await audit(user, "delete", "job", id);
-  contentChanged();
+  contentChanged(["/careers"]);
   redirect("/admin/jobs?saved=deleted");
 }
 
@@ -583,7 +620,8 @@ export async function saveUser(fd: FormData) {
     .where(id ? and(eq(schema.users.email, email), ne(schema.users.id, id)) : eq(schema.users.email, email));
   if (clash) fail(back, "Another user already has that email.");
 
-  const values = { name, email, role, active, ...(password ? { passwordHash: await bcrypt.hash(password, 12) } : {}) };
+  const jobTitle = optStr(fd, "jobTitle", 120);
+  const values = { name, email, role, active, jobTitle, ...(password ? { passwordHash: await bcrypt.hash(password, 12) } : {}) };
   if (id) await db.update(schema.users).set(values).where(eq(schema.users.id, id));
   else await db.insert(schema.users).values(values as typeof values & { passwordHash: string });
   await audit(me, id ? "update" : "create", "user", id);
