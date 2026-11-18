@@ -10,6 +10,10 @@ import { createSession, destroySession, requireUser, type SessionUser } from "@/
 import { CONTENT_TAG } from "@/lib/data";
 import { pingIndexNow } from "@/lib/indexnow";
 import { runHealthCheck } from "@/lib/health/run";
+import { mailConfig, sendMail, verifyMail } from "@/lib/mail";
+import { seal } from "@/lib/secret-box";
+import { findPasswordToken, markPasswordTokenUsed, sendPasswordLink } from "@/lib/password-tokens";
+import { randomBytes } from "node:crypto";
 import { rateLimit } from "@/lib/rate-limit";
 import { deleteUpload, saveImage } from "@/lib/uploads";
 import { slugify } from "@/lib/utils";
@@ -75,7 +79,8 @@ function contentChanged(paths: string[] = []) {
 }
 
 function fail(path: string, message: string): never {
-  redirect(`${path}${path.includes("?") ? "&" : "?"}error=${encodeURIComponent(message)}`);
+  const [p, hash] = path.split("#");
+  redirect(`${p}${p.includes("?") ? "&" : "?"}error=${encodeURIComponent(message)}${hash ? `#${hash}` : ""}`);
 }
 
 function isUniqueViolation(e: unknown) {
@@ -146,8 +151,13 @@ export async function changePasswordAction(fd: FormData) {
   if (!u || !(await bcrypt.compare(current, u.passwordHash))) fail("/admin/account", "Current password is incorrect.");
   if (next.length < 10) fail("/admin/account", "New password must be at least 10 characters.");
   if (next !== confirm) fail("/admin/account", "New passwords do not match.");
-  await db.update(schema.users).set({ passwordHash: await bcrypt.hash(next, 12) }).where(eq(schema.users.id, user.id));
+  await db
+    .update(schema.users)
+    .set({ passwordHash: await bcrypt.hash(next, 12), passwordChangedAt: new Date() })
+    .where(eq(schema.users.id, user.id));
   await audit(user, "password_change", "user", user.id);
+  // Signs out every other device; this one gets a fresh session.
+  await createSession(user.id);
   redirect("/admin/account?saved=1");
 }
 
@@ -617,8 +627,9 @@ export async function saveUser(fd: FormData) {
   const role = (str(fd, "role") === "admin" ? "admin" : "editor") as "admin" | "editor";
   const active = bool(fd, "active");
   const password = String(fd.get("password") ?? "");
+  const invite = !id && bool(fd, "invite");
   if (!name || !/^\S+@\S+\.\S+$/.test(email)) fail(back, "Name and a valid email are required.");
-  if (!id && password.length < 10) fail(back, "Set a password of at least 10 characters.");
+  if (!id && !invite && password.length < 10) fail(back, "Set a password of at least 10 characters, or tick “Email them a link”.");
   if (password && password.length < 10) fail(back, "Password must be at least 10 characters.");
   if (id === me.id && (role !== "admin" || !active)) fail(back, "You can't remove your own admin access.");
 
@@ -629,10 +640,28 @@ export async function saveUser(fd: FormData) {
   if (clash) fail(back, "Another user already has that email.");
 
   const jobTitle = optStr(fd, "jobTitle", 120);
-  const values = { name, email, role, active, jobTitle, ...(password ? { passwordHash: await bcrypt.hash(password, 12) } : {}) };
-  if (id) await db.update(schema.users).set(values).where(eq(schema.users.id, id));
-  else await db.insert(schema.users).values(values as typeof values & { passwordHash: string });
-  await audit(me, id ? "update" : "create", "user", id);
+  const values = {
+    name,
+    email,
+    role,
+    active,
+    jobTitle,
+    ...(password ? { passwordHash: await bcrypt.hash(password, 12), passwordChangedAt: new Date() } : {}),
+  };
+  if (id) {
+    await db.update(schema.users).set(values).where(eq(schema.users.id, id));
+    await audit(me, "update", "user", id);
+    redirect("/admin/users?saved=1");
+  }
+  // An invited user gets an unusable random password until they set their own.
+  const passwordHash = values.passwordHash ?? (await bcrypt.hash(randomBytes(32).toString("hex"), 12));
+  const [created] = await db.insert(schema.users).values({ ...values, passwordHash }).returning({ id: schema.users.id });
+  await audit(me, "create", "user", created.id);
+  if (invite) {
+    const sent = await sendPasswordLink({ id: created.id, name, email }, "invite", me.id);
+    if (!sent.ok) fail(`/admin/users/${created.id}`, `User created, but the invite email failed: ${sent.error}`);
+    redirect(`/admin/users/${created.id}?saved=invited`);
+  }
   redirect("/admin/users?saved=1");
 }
 
@@ -652,4 +681,129 @@ export async function runHealthNow() {
   const run = await runHealthCheck("manual");
   await audit(user, "run", "health", run?.id ?? null);
   redirect(run ? "/admin/health?ran=1" : "/admin/health?busy=1");
+}
+
+/* ---------------- email ---------------- */
+
+export async function saveEmailSettings(fd: FormData) {
+  const user = await requireUser("admin");
+  const host = str(fd, "smtpHost", 200).toLowerCase();
+  const port = int(fd, "smtpPort", 465);
+  const smtpUser = str(fd, "smtpUser", 200).toLowerCase();
+  const pass = String(fd.get("smtpPass") ?? "");
+  if (host && !/^[a-z0-9.-]+$/.test(host)) fail("/admin/settings#mail", "The SMTP server name doesn't look right (e.g. smtppro.zoho.com).");
+  if (smtpUser && !/^\S+@\S+\.\S+$/.test(smtpUser)) fail("/admin/settings#mail", "The username is the full email address, e.g. admin@techbucket.com.np.");
+  await db
+    .update(schema.siteSettings)
+    .set({
+      smtpHost: host || null,
+      smtpPort: [25, 465, 587, 2525].includes(port) ? port : 465,
+      smtpUser: smtpUser || null,
+      smtpFromName: optStr(fd, "smtpFromName", 120),
+      autoReply: bool(fd, "autoReply"),
+      ...(bool(fd, "smtpClear") ? { smtpPassEnc: null } : pass ? { smtpPassEnc: seal(pass) } : {}),
+    })
+    .where(eq(schema.siteSettings.id, 1));
+  await audit(user, "update", "email_settings", 1);
+  contentChanged();
+  redirect("/admin/settings?saved=1#mail");
+}
+
+export async function sendTestEmail(fd: FormData) {
+  const user = await requireUser("admin");
+  const to = str(fd, "to", 200) || user.email;
+  const c = await mailConfig();
+  if (!c) fail("/admin/settings#mail", "Save the SMTP server, username and password first.");
+  const check = await verifyMail(c);
+  if (!check.ok) fail("/admin/settings#mail", `Could not sign in to ${c.host}: ${check.error}`);
+  const r = await sendMail({
+    to,
+    subject: "Test email from techbucket.com.np",
+    text: `This is a test from the Tech Bucket website, sent by ${user.name}.\n\nIf you can read this, enquiry alerts, password resets and replies to clients will work.`,
+    kind: "test",
+    sentBy: user.id,
+  });
+  if (!r.ok) fail("/admin/settings#mail", `Sending failed: ${r.error}`);
+  redirect(`/admin/settings?mailed=${encodeURIComponent(to)}#mail`);
+}
+
+export async function sendUserPasswordLink(fd: FormData) {
+  const me = await requireUser("admin");
+  const id = Number(str(fd, "id"));
+  const [u] = await db.select().from(schema.users).where(eq(schema.users.id, id));
+  if (!u) fail("/admin/users", "User not found.");
+  const r = await sendPasswordLink(u, u.lastLoginAt ? "reset" : "invite", me.id);
+  await audit(me, "send_password_link", "user", id);
+  if (!r.ok) fail(`/admin/users/${id}`, `Email failed: ${r.error}`);
+  redirect(`/admin/users/${id}?saved=link`);
+}
+
+export async function replyToLead(fd: FormData) {
+  const user = await requireUser();
+  const id = Number(str(fd, "id"));
+  const back = `/admin/leads/${id}`;
+  const [lead] = await db.select().from(schema.leads).where(eq(schema.leads.id, id));
+  if (!lead) fail("/admin/leads", "Enquiry not found.");
+  const subject = str(fd, "subject", 250);
+  const message = str(fd, "message", 20000);
+  if (!subject || message.length < 5) fail(back, "Write a subject and a message.");
+  const [s] = await db.select({ email: schema.siteSettings.email }).from(schema.siteSettings).where(eq(schema.siteSettings.id, 1));
+  const r = await sendMail({
+    to: lead.email,
+    subject,
+    text: message,
+    kind: "lead_reply",
+    replyTo: s?.email,
+    leadId: lead.id,
+    sentBy: user.id,
+    keepBody: true,
+  });
+  if (!r.ok) fail(back, `Email not sent: ${r.error}`);
+  const stamp = new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kathmandu" }).format(new Date());
+  await db
+    .update(schema.leads)
+    .set({
+      status: lead.status === "new" ? "contacted" : lead.status,
+      notes: `${lead.notes ? `${lead.notes}\n` : ""}[${stamp}] ${user.name} emailed: ${subject}`.slice(0, 20000),
+    })
+    .where(eq(schema.leads.id, id));
+  await audit(user, "email", "lead", id);
+  redirect(`${back}?saved=emailed`);
+}
+
+/* ---------------- password reset (signed out) ---------------- */
+
+export async function requestPasswordReset(fd: FormData) {
+  const limit = await rateLimit("reset", 5, 15 * 60 * 1000);
+  if (!limit.ok) redirect("/admin/forgot?error=wait");
+  const email = str(fd, "email", 200).toLowerCase();
+  if (/^\S+@\S+\.\S+$/.test(email)) {
+    const [u] = await db.select().from(schema.users).where(eq(schema.users.email, email));
+    // Same response whether or not the account exists, so emails can't be probed.
+    if (u?.active) await sendPasswordLink(u, "reset");
+  }
+  redirect("/admin/forgot?sent=1");
+}
+
+export async function resetPasswordAction(fd: FormData) {
+  const limit = await rateLimit("reset-set", 10, 15 * 60 * 1000);
+  const token = str(fd, "token", 100);
+  const back = `/admin/reset?token=${encodeURIComponent(token)}`;
+  if (!limit.ok) fail(back, "Too many attempts. Wait 15 minutes.");
+  const row = await findPasswordToken(token);
+  if (!row) redirect("/admin/reset?expired=1");
+  const next = String(fd.get("next") ?? "");
+  if (next.length < 10) fail(back, "Use at least 10 characters.");
+  if (next !== String(fd.get("confirm") ?? "")) fail(back, "The two passwords don't match.");
+  await db
+    .update(schema.users)
+    .set({ passwordHash: await bcrypt.hash(next, 12), passwordChangedAt: new Date() })
+    .where(eq(schema.users.id, row.t.userId));
+  await markPasswordTokenUsed(row.t.id);
+  await db
+    .insert(schema.auditLog)
+    .values({ userId: row.t.userId, action: row.t.purpose === "invite" ? "password_set" : "password_reset", entity: "user", entityId: String(row.t.userId) })
+    .catch(() => {});
+  await createSession(row.t.userId);
+  redirect("/admin?welcome=1");
 }

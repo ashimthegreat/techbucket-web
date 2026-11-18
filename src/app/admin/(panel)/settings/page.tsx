@@ -1,22 +1,32 @@
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireUser } from "@/lib/auth";
-import { Card, Checkbox, Flash, PageHeader, TextArea, TextField } from "@/components/admin/ui";
+import { Badge, Card, Checkbox, Flash, PageHeader, TextArea, TextField } from "@/components/admin/ui";
 import { SubmitButton } from "@/components/admin/client";
-import { saveSettings } from "../../actions";
+import { saveEmailSettings, saveSettings, sendTestEmail } from "../../actions";
+import { formatDateTime } from "@/lib/utils";
 
 export const metadata = { title: "Site settings" };
-type Props = { searchParams: Promise<{ saved?: string; error?: string }> };
+type Props = { searchParams: Promise<{ saved?: string; error?: string; mailed?: string }> };
 
 export default async function SettingsAdmin({ searchParams }: Props) {
-  await requireUser("admin");
+  const me = await requireUser("admin");
   const sp = await searchParams;
-  const [s] = await db.select().from(schema.siteSettings).where(eq(schema.siteSettings.id, 1));
+  const [[s], emails] = await Promise.all([
+    db.select().from(schema.siteSettings).where(eq(schema.siteSettings.id, 1)),
+    db.select().from(schema.emailLog).orderBy(desc(schema.emailLog.createdAt)).limit(12),
+  ]);
+  const envMail = !s.smtpHost && !!process.env.SMTP_HOST;
   const socials = s.socials ?? {};
   return (
     <>
       <PageHeader title="Site settings" description="Company details, homepage hero, about text and default SEO." />
       <Flash saved={sp.saved} error={sp.error} />
+      {sp.mailed && (
+        <p role="status" className="mb-6 border-l-[3px] border-emerald-600 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Test email sent to {sp.mailed}. Check that inbox (and spam).
+        </p>
+      )}
       <form action={saveSettings} className="space-y-6">
         <Card title="Homepage hero">
           <div className="grid gap-5">
@@ -113,6 +123,88 @@ export default async function SettingsAdmin({ searchParams }: Props) {
           <SubmitButton>Save settings</SubmitButton>
         </div>
       </form>
+
+      <section id="mail" className="mt-10 scroll-mt-8 space-y-6">
+        <h2 className="font-display text-2xl font-semibold tracking-[-0.01em]">Email</h2>
+        <p className="max-w-2xl text-[15px] text-muted">
+          Used for enquiry and application alerts, the automatic “we received your message” reply, password resets, invites,
+          replies to enquiries from the admin and the weekly site health report.
+        </p>
+        <form action={saveEmailSettings}>
+          <Card title="Outgoing mail server (SMTP)">
+            <div className="grid gap-5 md:grid-cols-2">
+              <TextField
+                name="smtpHost"
+                label="SMTP server"
+                defaultValue={s.smtpHost}
+                placeholder="smtppro.zoho.com"
+                hint="Zoho: Settings → Mail Accounts → SMTP shows yours (.com, .in or .eu)"
+              />
+              <TextField name="smtpPort" label="Port" type="number" defaultValue={s.smtpPort ?? 465} hint="465 (SSL) or 587 (TLS)" />
+              <TextField name="smtpUser" label="Username (mailbox)" type="email" defaultValue={s.smtpUser} placeholder="admin@techbucket.com.np" />
+              <div>
+                <TextField
+                  name="smtpPass"
+                  label="Password"
+                  type="password"
+                  placeholder={s.smtpPassEnc ? "•••••••• saved; leave blank to keep" : ""}
+                  hint="use a Zoho app password"
+                />
+                {s.smtpPassEnc && <Checkbox name="smtpClear" label="Remove the saved password" />}
+              </div>
+              <TextField name="smtpFromName" label="Sender name" defaultValue={s.smtpFromName} placeholder={s.companyName} hint="shown as the From name" />
+            </div>
+            <div className="mt-5">
+              <Checkbox
+                name="autoReply"
+                label="Send visitors an automatic “we received your enquiry/application” email"
+                defaultChecked={s.autoReply}
+              />
+            </div>
+            {envMail && (
+              <p className="mt-4 text-sm text-subtle">
+                Currently using the SMTP settings from the server&apos;s .env file. Settings saved here take priority.
+              </p>
+            )}
+            <div className="mt-6">
+              <SubmitButton>Save email settings</SubmitButton>
+            </div>
+          </Card>
+        </form>
+
+        <form action={sendTestEmail}>
+          <Card title="Send a test email">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+              <TextField name="to" label="Send to" type="email" defaultValue={me.email} className="sm:flex-1" />
+              <SubmitButton pendingLabel="Sending…">Send test</SubmitButton>
+            </div>
+          </Card>
+        </form>
+
+        <Card title="Recent emails">
+          {emails.length === 0 ? (
+            <p className="text-[15px] text-muted">Nothing sent yet.</p>
+          ) : (
+            <ul className="divide-y divide-hair">
+              {emails.map((e) => (
+                <li key={e.id} className="flex flex-col gap-1 py-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{e.subject}</span>
+                    <span className="block truncate text-sm text-muted">
+                      to {e.to} · {e.kind.replace(/_/g, " ")}
+                    </span>
+                    {e.error && <span className="block text-sm break-words text-red-700">{e.error}</span>}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-3 sm:flex-col sm:items-end sm:gap-1">
+                    <Badge value={e.status === "sent" ? "published" : e.status === "failed" ? "new" : "draft"} label={e.status} />
+                    <span className="text-xs text-subtle">{formatDateTime(e.createdAt)}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </section>
     </>
   );
 }

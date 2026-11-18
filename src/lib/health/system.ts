@@ -5,6 +5,7 @@ import path from "node:path";
 import { and, eq, gte, sql } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { uploadRoot } from "@/lib/uploads";
+import { mailConfig } from "@/lib/mail";
 import { Collector, DAY, daysSince, listOf } from "./collector";
 
 const RUNTIME_PACKAGES = ["next", "react", "react-dom", "pg", "bcryptjs", "nodemailer", "sanitize-html"];
@@ -210,15 +211,30 @@ export async function systemChecks(c: Collector) {
   }
 
   /* ---------- Email, backups, logs, storage ---------- */
-  const smtp = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
-  c.check(smtp, {
+  const smtp = await mailConfig().catch(() => null);
+  c.check(!!smtp, {
     id: "smtp",
     category: "operations",
-    severity: "warning",
-    title: "Email alerts are not set up",
-    passTitle: "Email alerts are set up",
-    detail: "New enquiries, job applications and this weekly report are not emailed to anyone.",
-    fix: "Create noreply@techbucket.com.np in cPanel and add the SMTP_* lines to ~/.techbucket-deploy/env.",
+    severity: "critical",
+    title: "Email is not set up",
+    passTitle: `Email is set up (${smtp?.user ?? ""} via ${smtp?.host ?? ""})`,
+    detail: "Enquiry alerts, replies to visitors, password resets and this weekly report cannot be sent.",
+    fix: "Site settings → Email: enter the Zoho SMTP details, save, then send a test email.",
+    href: "/admin/settings#mail",
+  });
+  const failedMail = await db
+    .select({ to: schema.emailLog.to, subject: schema.emailLog.subject, error: schema.emailLog.error })
+    .from(schema.emailLog)
+    .where(and(eq(schema.emailLog.status, "failed"), gte(schema.emailLog.createdAt, sql`now() - interval '7 days'`)));
+  c.check(failedMail.length === 0, {
+    id: "mail-failures",
+    category: "operations",
+    severity: "critical",
+    title: `${failedMail.length} email${failedMail.length === 1 ? "" : "s"} failed to send in the last 7 days`,
+    passTitle: "No failed emails this week",
+    detail: listOf(failedMail.map((m) => `${m.subject} → ${m.to}: ${m.error ?? ""}`.slice(0, 220))),
+    fix: "Check the Email settings (Zoho password or app password may have changed), then send a test email.",
+    href: "/admin/settings#mail",
   });
   const [settings] = await db.select({ to: schema.siteSettings.leadNotifyEmail }).from(schema.siteSettings).where(eq(schema.siteSettings.id, 1));
   c.check(!!settings?.to, {

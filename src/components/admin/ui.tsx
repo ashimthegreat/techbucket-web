@@ -51,7 +51,7 @@ export function Flash({ saved, error }: { saved?: string; error?: string }) {
   if (saved)
     return (
       <p role="status" className="mb-6 border-l-[3px] border-emerald-600 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-        {saved === "deleted" ? "Deleted." : "Saved."}
+        {{ deleted: "Deleted.", invited: "User created and invite email sent.", link: "Password link emailed.", emailed: "Email sent." }[saved] ?? "Saved."}
       </p>
     );
   return null;

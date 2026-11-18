@@ -55,6 +55,8 @@ export const users = pgTable("users", {
   passwordHash: text("password_hash").notNull(),
   role: roleEnum("role").notNull().default("editor"),
   jobTitle: varchar("job_title", { length: 120 }),
+  // Sessions issued before this moment are rejected (set on every password change).
+  passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
   active: boolean("active").notNull().default(true),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   ...timestamps,
@@ -94,6 +96,13 @@ export const siteSettings = pgTable("site_settings", {
   openingHours: varchar("opening_hours", { length: 200 }),
   mapUrl: text("map_url"),
   allowAiTraining: boolean("allow_ai_training").notNull().default(true),
+  // Outgoing email (SMTP). The password is stored encrypted (see lib/secret-box.ts).
+  smtpHost: varchar("smtp_host", { length: 200 }),
+  smtpPort: integer("smtp_port"),
+  smtpUser: varchar("smtp_user", { length: 200 }),
+  smtpPassEnc: text("smtp_pass_enc"),
+  smtpFromName: varchar("smtp_from_name", { length: 120 }),
+  autoReply: boolean("auto_reply").notNull().default(true),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull()
@@ -311,6 +320,41 @@ export const healthRuns = pgTable(
 );
 
 export type HealthRun = typeof healthRuns.$inferSelect;
+
+/* ---------- One-time links: password reset and new-user invites ---------- */
+export const passwordTokens = pgTable(
+  "password_tokens",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    purpose: varchar("purpose", { length: 20 }).notNull().default("reset"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("password_tokens_user_idx").on(t.userId)],
+);
+
+/* ---------- Every email the site sends ---------- */
+export const emailLog = pgTable(
+  "email_log",
+  {
+    id: serial("id").primaryKey(),
+    to: varchar("to", { length: 300 }).notNull(),
+    subject: varchar("subject", { length: 300 }).notNull(),
+    kind: varchar("kind", { length: 40 }).notNull(),
+    status: varchar("status", { length: 20 }).notNull(),
+    error: text("error"),
+    body: text("body"),
+    leadId: integer("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    sentBy: integer("sent_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("email_log_created_idx").on(t.createdAt), index("email_log_lead_idx").on(t.leadId)],
+);
 export type User = typeof users.$inferSelect;
 export type SiteSettings = typeof siteSettings.$inferSelect;
 export type Service = typeof services.$inferSelect;

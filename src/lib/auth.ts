@@ -61,10 +61,13 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
         email: schema.users.email,
         role: schema.users.role,
         active: schema.users.active,
+        passwordChangedAt: schema.users.passwordChangedAt,
       })
       .from(schema.users)
       .where(eq(schema.users.id, uid));
     if (!u || !u.active) return null;
+    // Sessions from before the last password change (e.g. a reset) are no longer valid.
+    if (u.passwordChangedAt && (payload.iat ?? 0) * 1000 + 1000 < new Date(u.passwordChangedAt).getTime()) return null;
     return { id: u.id, name: u.name, email: u.email, role: u.role };
   } catch {
     return null;

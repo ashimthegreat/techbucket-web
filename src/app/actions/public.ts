@@ -6,7 +6,9 @@ import { z } from "zod";
 import { db, schema } from "@/db";
 import { rateLimit } from "@/lib/rate-limit";
 import { saveCv } from "@/lib/uploads";
-import { notify } from "@/lib/mail";
+import { after } from "next/server";
+import { notify, sendMail } from "@/lib/mail";
+import { siteUrl } from "@/lib/utils";
 import { getSettings } from "@/lib/data";
 
 export type FormState = {
@@ -57,22 +59,41 @@ export async function submitLead(_prev: FormState, formData: FormData): Promise<
   }
   const h = await headers();
   const data = parsed.data;
+  let leadId: number;
   try {
-    await db.insert(schema.leads).values({
-      ...data,
-      ip: limit.ip,
-      userAgent: h.get("user-agent")?.slice(0, 500) ?? null,
-    });
+    const [row] = await db
+      .insert(schema.leads)
+      .values({
+        ...data,
+        ip: limit.ip,
+        userAgent: h.get("user-agent")?.slice(0, 500) ?? null,
+      })
+      .returning({ id: schema.leads.id });
+    leadId = row.id;
   } catch (e) {
     console.error("[lead] insert failed", e);
     return { ok: false, message: "Something went wrong on our side. Please email or call us instead.", values: echo(formData) };
   }
   const settings = await getSettings();
-  await notify(
-    settings.leadNotifyEmail,
-    `New enquiry: ${data.name}${data.organisation ? ` (${data.organisation})` : ""}`,
-    `Name: ${data.name}\nOrganisation: ${data.organisation}\nEmail: ${data.email}\nPhone: ${data.phone}\nInterest: ${data.service}\nSource: ${data.source}\n\n${data.message}\n\nManage in admin: ${process.env.SITE_URL ?? ""}/admin/leads`,
-  );
+  // Emails go out after the visitor gets their confirmation, so a slow mail server never delays the form.
+  after(async () => {
+    await notify(
+      settings.leadNotifyEmail,
+      `New enquiry: ${data.name}${data.organisation ? ` (${data.organisation})` : ""}`,
+      `Name: ${data.name}\nOrganisation: ${data.organisation}\nEmail: ${data.email}\nPhone: ${data.phone}\nInterest: ${data.service}\nSource: ${data.source}\n\n${data.message}\n\nOpen in admin: ${siteUrl(`/admin/leads/${leadId}`)}`,
+      "lead_alert",
+    );
+    if (settings.autoReply) {
+      await sendMail({
+        to: data.email,
+        subject: `We received your enquiry: ${settings.companyName}`,
+        text: `Namaste ${data.name.split(" ")[0]},\n\nThank you for contacting ${settings.companyName}. We have received your enquiry${data.service ? ` about ${data.service}` : ""} and one of our team will reply within one working day.\n\nIf it is urgent, call us on ${settings.phonePrimary}.\n\nYour message:\n${data.message}\n\nRegards,\n${settings.companyName}\n${settings.address}\n${settings.phonePrimary} · ${settings.email}`,
+        kind: "lead_autoreply",
+        replyTo: settings.email,
+        leadId,
+      });
+    }
+  });
   return { ok: true, message: "Thank you — we'll be in touch within one working day." };
 }
 
@@ -124,10 +145,22 @@ export async function submitApplication(_prev: FormState, formData: FormData): P
     cvOriginalName: saved.originalName,
   });
   const settings = await getSettings();
-  await notify(
-    settings.leadNotifyEmail,
-    `New application: ${data.name} — ${jobTitle}`,
-    `${data.name} <${data.email}> applied for ${jobTitle}.\n\nReview in admin: ${process.env.SITE_URL ?? ""}/admin/applications`,
-  );
+  after(async () => {
+    await notify(
+      settings.leadNotifyEmail,
+      `New application: ${data.name} — ${jobTitle}`,
+      `${data.name} <${data.email}> applied for ${jobTitle}.\n\nReview in admin: ${siteUrl("/admin/applications")}`,
+      "application_alert",
+    );
+    if (settings.autoReply) {
+      await sendMail({
+        to: data.email,
+        subject: `Application received: ${jobTitle}`,
+        text: `Namaste ${data.name.split(" ")[0]},\n\nThank you for applying to ${settings.companyName} (${jobTitle}). We have received your CV. We review every application and will contact shortlisted candidates.\n\nRegards,\n${settings.companyName}`,
+        kind: "application_autoreply",
+        replyTo: settings.email,
+      });
+    }
+  });
   return { ok: true, message: "Thank you — your application has been received. We'll contact shortlisted candidates." };
 }

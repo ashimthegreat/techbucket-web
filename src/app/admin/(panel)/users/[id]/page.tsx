@@ -4,7 +4,7 @@ import { db, schema } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { Card, Checkbox, Flash, PageHeader, SelectField, TextField } from "@/components/admin/ui";
 import { ConfirmSubmit, SubmitButton } from "@/components/admin/client";
-import { deleteUser, saveUser } from "../../../actions";
+import { deleteUser, saveUser, sendUserPasswordLink } from "../../../actions";
 
 type Props = { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; error?: string }> };
 
@@ -26,12 +26,36 @@ export default async function EditUser({ params, searchParams }: Props) {
             <TextField name="email" label="Email" type="email" defaultValue={row?.email} required />
             <TextField name="jobTitle" label="Job title" defaultValue={row?.jobTitle} hint="shown as the author of articles, e.g. Managing Director" />
             <SelectField name="role" label="Role" defaultValue={row?.role ?? "editor"} options={[{ value: "editor", label: "Editor" }, { value: "admin", label: "Admin" }]} />
-            <TextField name="password" label={isNew ? "Password" : "New password"} type="password" required={isNew} hint={isNew ? "at least 10 characters" : "leave blank to keep"} />
+            {isNew && (
+              <Checkbox
+                name="invite"
+                label="Email them a link to set their own password"
+                defaultChecked
+                hint="Recommended. Leave the password below empty. The link works for 3 days."
+              />
+            )}
+            <TextField
+              name="password"
+              label={isNew ? "Or set a password yourself" : "New password"}
+              type="password"
+              hint={isNew ? "at least 10 characters; untick the box above" : "leave blank to keep"}
+            />
             <Checkbox name="active" label="Active" defaultChecked={row?.active ?? true} hint="Disabled users can't sign in" />
             <SubmitButton />
           </div>
         </Card>
       </form>
+      {!isNew && (
+        <form action={sendUserPasswordLink} className="mt-6 max-w-xl">
+          <input type="hidden" name="id" value={id} />
+          <Card title="Password link">
+            <p className="mb-4 text-[15px] text-muted">
+              Email {row!.name.split(" ")[0]} a one-time link to {row!.lastLoginAt ? "reset their password (valid 1 hour)" : "set their password (valid 3 days)"}.
+            </p>
+            <SubmitButton pendingLabel="Sending…">Email password link</SubmitButton>
+          </Card>
+        </form>
+      )}
       {!isNew && row!.id !== me.id && (
         <form action={deleteUser} className="mt-8">
           <input type="hidden" name="id" value={id} />

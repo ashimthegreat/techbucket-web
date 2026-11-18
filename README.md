@@ -82,6 +82,17 @@ Then follow [DEPLOY-CPANEL.md](DEPLOY-CPANEL.md). After the first setup, pushes 
 - **`/llms.txt`**: plain-text map of the site for AI assistants, generated from the database.
 - **Sitemap dates** come from real edit times, so search engines can trust them.
 
+## Email (Zoho or any SMTP)
+
+Set it up in *Admin → Site settings → Email*: SMTP server (Zoho: `smtppro.zoho.com`, or `.in`/`.eu` for those data centres, port 465), the mailbox address as username, and its password (a Zoho **app password** is recommended). The password is stored encrypted (AES-256-GCM, key derived from `SESSION_SECRET`), never in the code. Use "Send test" to check it. If nothing is set there, the `SMTP_*` lines in `.env` are used.
+
+What it sends, all logged under *Recent emails*:
+- New enquiry and job application alerts to "Send new enquiries to"
+- An automatic acknowledgement to the visitor (can be switched off)
+- Replies to enquiries written in the admin (*Enquiries → an enquiry → Reply by email*)
+- "Forgot your password?" links on the sign-in page (valid 1 hour, once) and invites for new users (3 days); changing or resetting a password signs out every other session
+- The weekly Site health report
+
 ## Site health (weekly automatic audit)
 
 *Admin → Site health* shows scores for Content, SEO, Security and Operations, every problem found with how to fix it, and a history of past checks. The admin dashboard and menu show the score and the number of critical issues.
