@@ -14,6 +14,7 @@ import { mailConfig, sendMail, verifyMail } from "@/lib/mail";
 import { seal } from "@/lib/secret-box";
 import { findPasswordToken, markPasswordTokenUsed, sendPasswordLink } from "@/lib/password-tokens";
 import { randomBytes } from "node:crypto";
+import { lookup } from "node:dns/promises";
 import { rateLimit } from "@/lib/rate-limit";
 import { deleteUpload, saveImage } from "@/lib/uploads";
 import { slugify } from "@/lib/utils";
@@ -694,6 +695,14 @@ export async function saveEmailSettings(fd: FormData) {
   const fromAddress = str(fd, "smtpFromAddress", 200).toLowerCase();
   if (fromAddress && !/^\S+@\S+\.\S+$/.test(fromAddress)) fail("/admin/settings#mail", "The Send from address must be an email address, e.g. noreply@techbucket.com.np.");
   if (host && !/^[a-z0-9.-]+$/.test(host)) fail("/admin/settings#mail", "The SMTP server name doesn't look right (e.g. smtppro.zoho.com).");
+  if (host) {
+    // Catch typos (e.g. "smptppro") at save time instead of on the first failed email.
+    const found = await lookup(host).then(
+      () => true,
+      (e: NodeJS.ErrnoException) => e.code !== "ENOTFOUND", // only a definite "no such name" blocks saving
+    );
+    if (!found) fail("/admin/settings#mail", `No mail server called “${host}” exists. Check the spelling, e.g. smtppro.zoho.com.`);
+  }
   if (smtpUser && !/^\S+@\S+\.\S+$/.test(smtpUser)) fail("/admin/settings#mail", "The username is the full email address, e.g. admin@techbucket.com.np.");
   await db
     .update(schema.siteSettings)
