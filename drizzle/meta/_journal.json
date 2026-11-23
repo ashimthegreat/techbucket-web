@@ -36,6 +36,13 @@
       "when": 1794998321830,
       "tag": "0004_smtp_from",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1795430340747,
+      "tag": "0005_chat",
+      "breakpoints": true
     }
   ]
 }

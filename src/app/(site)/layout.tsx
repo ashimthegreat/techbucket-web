@@ -4,6 +4,7 @@ import { JsonLd } from "@/components/site/sections";
 import { getIndustries, getServices, getSettings } from "@/lib/data";
 import type { Metadata } from "next";
 import { organizationJsonLd } from "@/lib/seo";
+import { ChatWidget } from "@/components/site/chat-widget";
 
 // Render at request time from cached database content, so builds never
 // need a database and admin edits appear immediately.
@@ -41,6 +42,9 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <main id="main">{children}</main>
       <SiteFooter settings={settings} services={services} industries={industries} />
       <JsonLd data={org} />
+      {settings.chatEnabled && (
+        <ChatWidget companyName={settings.companyName} teaser="Namaste! Looking for CCTV, networking, security or software? Ask me and I'll point you the right way." />
+      )}
     </>
   );
 }

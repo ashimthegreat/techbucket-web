@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { desc, eq } from "drizzle-orm";
 import { db, schema } from "@/db";
@@ -14,7 +15,7 @@ export default async function LeadPage({ params, searchParams }: Props) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const [lead] = await db.select().from(schema.leads).where(eq(schema.leads.id, Number(id)));
   if (!lead) notFound();
-  const [emails, [settings]] = await Promise.all([
+  const [emails, [settings], [chat], [owner]] = await Promise.all([
     db
       .select({ e: schema.emailLog, by: schema.users.name })
       .from(schema.emailLog)
@@ -22,6 +23,8 @@ export default async function LeadPage({ params, searchParams }: Props) {
       .where(eq(schema.emailLog.leadId, lead.id))
       .orderBy(desc(schema.emailLog.createdAt)),
     db.select().from(schema.siteSettings).where(eq(schema.siteSettings.id, 1)),
+    db.select({ id: schema.chatSessions.id }).from(schema.chatSessions).where(eq(schema.chatSessions.leadId, lead.id)),
+    lead.assignedTo ? db.select({ name: schema.users.name }).from(schema.users).where(eq(schema.users.id, lead.assignedTo)) : Promise.resolve([]),
   ]);
   const first = lead.name.split(" ")[0];
   const draft = `Namaste ${first},\n\nThank you for your enquiry${lead.service ? ` about ${lead.service}` : ""}.\n\n\n\nRegards,\n${user.name}\n${settings.companyName}\n${settings.phonePrimary} · ${settings.email}`;
@@ -48,6 +51,20 @@ export default async function LeadPage({ params, searchParams }: Props) {
           </dl>
           <h3 className="mt-6 mb-2 text-sm font-semibold text-subtle">Message</h3>
           <p className="text-[15px] leading-relaxed whitespace-pre-wrap">{lead.message}</p>
+          {(owner || chat) && (
+            <p className="mt-6 flex flex-wrap gap-x-6 gap-y-2 text-sm">
+              {owner && (
+                <span>
+                  Assigned to <strong>{owner.name}</strong>
+                </span>
+              )}
+              {chat && (
+                <Link href={`/admin/chats/${chat.id}`} className="font-semibold underline-offset-4 hover:underline">
+                  Open the website chat →
+                </Link>
+              )}
+            </p>
+          )}
           <p className="mt-6 text-xs text-subtle">IP {lead.ip ?? "unknown"} · {lead.userAgent?.slice(0, 120)}</p>
         </Card>
         <div className="space-y-6 lg:col-start-1">

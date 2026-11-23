@@ -14,6 +14,7 @@ import { mailConfig, sendMail, verifyMail } from "@/lib/mail";
 import { seal } from "@/lib/secret-box";
 import { findPasswordToken, markPasswordTokenUsed, sendPasswordLink } from "@/lib/password-tokens";
 import { randomBytes } from "node:crypto";
+import { forgetKnowledge } from "@/lib/chat/knowledge";
 import { lookup } from "node:dns/promises";
 import { rateLimit } from "@/lib/rate-limit";
 import { deleteUpload, saveImage } from "@/lib/uploads";
@@ -76,6 +77,7 @@ async function imageFromForm(fd: FormData, name: string, user: SessionUser): Pro
 /** Refresh cached pages, then tell Bing/IndexNow which public URLs changed (after the response). */
 function contentChanged(paths: string[] = []) {
   updateTag(CONTENT_TAG);
+  forgetKnowledge(); // the chat assistant re-reads the site content
   if (paths.length) after(() => pingIndexNow(["/sitemap.xml", "/llms.txt", ...paths]));
 }
 
@@ -818,4 +820,28 @@ export async function resetPasswordAction(fd: FormData) {
     .catch(() => {});
   await createSession(row.t.userId);
   redirect("/admin?welcome=1");
+}
+
+/* ---------------- chat assistant ---------------- */
+
+export async function saveChatSettings(fd: FormData) {
+  const user = await requireUser("admin");
+  const key = String(fd.get("chatAiKey") ?? "").trim();
+  if (key && !/^sk-ant-[A-Za-z0-9_-]{20,}$/.test(key)) fail("/admin/settings#chat", "That doesn't look like an Anthropic API key (it starts with sk-ant-).");
+  const model = str(fd, "chatAiModel", 80);
+  const assignee = Number(str(fd, "chatAssigneeId"));
+  await db
+    .update(schema.siteSettings)
+    .set({
+      chatEnabled: bool(fd, "chatEnabled"),
+      chatAssigneeId: Number.isInteger(assignee) && assignee > 0 ? assignee : null,
+      chatWelcome: optStr(fd, "chatWelcome", 500),
+      chatAiModel: /^claude-[a-z0-9.-]+$/.test(model) ? model : null,
+      chatDailyLimit: Math.min(5000, Math.max(0, int(fd, "chatDailyLimit", 400))),
+      ...(bool(fd, "chatAiClear") ? { chatAiKeyEnc: null } : key ? { chatAiKeyEnc: seal(key) } : {}),
+    })
+    .where(eq(schema.siteSettings.id, 1));
+  await audit(user, "update", "chat_settings", 1);
+  contentChanged();
+  redirect("/admin/settings?saved=1#chat");
 }

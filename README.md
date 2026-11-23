@@ -82,6 +82,15 @@ Then follow [DEPLOY-CPANEL.md](DEPLOY-CPANEL.md). After the first setup, pushes 
 - **`/llms.txt`**: plain-text map of the site for AI assistants, generated from the database.
 - **Sitemap dates** come from real edit times, so search engines can trust them.
 
+## Website chat (AI assistant + live chat)
+
+Turn it on in *Admin → Site settings → Website chat*.
+
+- **Assistant**: answers visitors from the site's own content (services, FAQs, industries, case studies, articles, contact details), shows tappable service/case-study cards and quick-reply buttons, and collects name/email/phone when someone wants a quote or a person. It uses the Claude API (Anthropic key entered in the admin, stored encrypted; Haiku by default) with a daily cap on AI replies. Without a key, or past the cap, it falls back to keyword answers from the FAQs and hands over to the team.
+- **Cases**: when the visitor leaves contact details or asks for a person, the chat becomes an enquiry (source "chat") assigned to the user chosen in settings, who gets an email with the transcript.
+- **Live chat**: *Admin → Live chat* lists conversations; replying takes over from the assistant and the visitor sees it instantly (polling). If the visitor has left, the reply is emailed to them with a link back to the conversation. Admin pages chime and show a desktop notification when a visitor is waiting.
+- Site health flags chats left waiting over 30 minutes.
+
 ## Email (Zoho or any SMTP)
 
 Set it up in *Admin → Site settings → Email*: SMTP server (Zoho: `smtppro.zoho.com`, or `.in`/`.eu` for those data centres, port 465), the mailbox address as username, its password, and optionally a separate *Send from* address (e.g. a `noreply@` group the mailbox may send as; the mailbox stays the envelope sender so bounces reach it) (a Zoho **app password** is recommended). The password is stored encrypted (AES-256-GCM, key derived from `SESSION_SECRET`), never in the code. Use "Send test" to check it. If nothing is set there, the `SMTP_*` lines in `.env` are used.

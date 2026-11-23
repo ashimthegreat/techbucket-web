@@ -59,6 +59,9 @@ export function Flash({ saved, error }: { saved?: string; error?: string }) {
 
 const badgeTone: Record<string, string> = {
   new: "bg-accent-wash text-accent-ink",
+  waiting: "bg-accent-wash text-accent-ink",
+  live: "bg-emerald-50 text-emerald-800",
+  bot: "bg-sky-50 text-sky-800",
   published: "bg-emerald-50 text-emerald-800",
   open: "bg-emerald-50 text-emerald-800",
   won: "bg-emerald-50 text-emerald-800",

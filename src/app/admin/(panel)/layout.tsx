@@ -4,6 +4,7 @@ import { count, desc, eq, isNotNull } from "drizzle-orm";
 import { db, schema } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { AdminNav } from "@/components/admin/client";
+import { ChatNotifier } from "@/components/admin/chat";
 import { logoutAction } from "../actions";
 
 export const metadata: Metadata = {
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const [[newLeads], [newApps], [health]] = await Promise.all([
+  const [[newLeads], [newApps], [health], [waitingChats]] = await Promise.all([
     db.select({ n: count() }).from(schema.leads).where(eq(schema.leads.status, "new")),
     db.select({ n: count() }).from(schema.applications).where(eq(schema.applications.status, "new")),
     db
@@ -23,6 +24,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       .where(isNotNull(schema.healthRuns.finishedAt))
       .orderBy(desc(schema.healthRuns.startedAt))
       .limit(1),
+    db.select({ n: count() }).from(schema.chatSessions).where(eq(schema.chatSessions.status, "waiting")),
   ]);
   const critical = health?.findings.filter((f) => f.severity === "critical").length ?? 0;
 
@@ -31,6 +33,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       title: "Overview",
       items: [
         { href: "/admin", label: "Dashboard" },
+        { href: "/admin/chats", label: "Live chat", badge: waitingChats.n },
         { href: "/admin/leads", label: "Enquiries", badge: newLeads.n },
         { href: "/admin/applications", label: "Applications", badge: newApps.n },
         { href: "/admin/health", label: "Site health", badge: critical },
@@ -66,6 +69,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="min-h-screen bg-mist lg:flex">
       <AdminNav groups={groups} user={user} />
+      <ChatNotifier />
       <div className="min-w-0 flex-1">
         <div className="flex items-center justify-end gap-5 border-b border-hair bg-white px-5 py-3 text-sm sm:px-8">
           <Link href="/" target="_blank" className="font-medium text-subtle hover:text-ink">

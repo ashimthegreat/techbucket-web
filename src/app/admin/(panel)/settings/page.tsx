@@ -3,7 +3,8 @@ import { db, schema } from "@/db";
 import { requireUser } from "@/lib/auth";
 import { Badge, Card, Checkbox, Flash, PageHeader, TextArea, TextField } from "@/components/admin/ui";
 import { SubmitButton } from "@/components/admin/client";
-import { saveEmailSettings, saveSettings, sendTestEmail } from "../../actions";
+import { saveChatSettings, saveEmailSettings, saveSettings, sendTestEmail } from "../../actions";
+import { SelectField } from "@/components/admin/ui";
 import { formatDateTime } from "@/lib/utils";
 
 export const metadata = { title: "Site settings" };
@@ -12,9 +13,10 @@ type Props = { searchParams: Promise<{ saved?: string; error?: string; mailed?: 
 export default async function SettingsAdmin({ searchParams }: Props) {
   const me = await requireUser("admin");
   const sp = await searchParams;
-  const [[s], emails] = await Promise.all([
+  const [[s], emails, staff] = await Promise.all([
     db.select().from(schema.siteSettings).where(eq(schema.siteSettings.id, 1)),
     db.select().from(schema.emailLog).orderBy(desc(schema.emailLog.createdAt)).limit(12),
+    db.select({ id: schema.users.id, name: schema.users.name, email: schema.users.email }).from(schema.users).where(eq(schema.users.active, true)),
   ]);
   const envMail = !s.smtpHost && !!process.env.SMTP_HOST;
   const socials = s.socials ?? {};
@@ -123,6 +125,70 @@ export default async function SettingsAdmin({ searchParams }: Props) {
           <SubmitButton>Save settings</SubmitButton>
         </div>
       </form>
+
+      <section id="chat" className="mt-10 scroll-mt-8 space-y-6">
+        <h2 className="font-display text-2xl font-semibold tracking-[-0.01em]">Website chat</h2>
+        <p className="max-w-2xl text-[15px] text-muted">
+          A chat button on every page. The AI assistant answers from the website&apos;s own content (services, FAQs, case studies, contact
+          details). When a visitor wants a quote or a person, the chat becomes an enquiry assigned to the person below, who gets an email
+          and replies under <strong>Live chat</strong>.
+        </p>
+        <form action={saveChatSettings}>
+          <Card title="Chat assistant">
+            <div className="space-y-5">
+              <Checkbox name="chatEnabled" label="Show the chat on the website" defaultChecked={s.chatEnabled} />
+              <div className="grid gap-5 md:grid-cols-2">
+                <SelectField
+                  name="chatAssigneeId"
+                  label="Assign chats and cases to"
+                  defaultValue={s.chatAssigneeId ? String(s.chatAssigneeId) : ""}
+                  options={[{ value: "", label: "First admin user" }, ...staff.map((u) => ({ value: String(u.id), label: `${u.name} (${u.email})` }))]}
+                />
+                <TextField
+                  name="chatDailyLimit"
+                  label="AI replies per day (cost cap)"
+                  type="number"
+                  defaultValue={s.chatDailyLimit}
+                  hint="after this, simple answers + hand-off"
+                />
+                <div>
+                  <TextField
+                    name="chatAiKey"
+                    label="Anthropic API key"
+                    type="password"
+                    placeholder={s.chatAiKeyEnc ? "•••••••• saved; leave blank to keep" : "sk-ant-…"}
+                    hint="from console.anthropic.com"
+                  />
+                  {s.chatAiKeyEnc && <Checkbox name="chatAiClear" label="Remove the saved key" />}
+                </div>
+                <SelectField
+                  name="chatAiModel"
+                  label="AI model"
+                  defaultValue={s.chatAiModel ?? "claude-haiku-5-5"}
+                  options={[
+                    { value: "claude-haiku-5-5", label: "Claude Haiku 5.5 (fast, lowest cost)" },
+                    { value: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 (smarter, costs more)" },
+                  ]}
+                />
+              </div>
+              <TextArea
+                name="chatWelcome"
+                label="Welcome message"
+                rows={2}
+                defaultValue={s.chatWelcome}
+                hint="first message visitors see"
+                placeholder={`Namaste! I'm the ${s.companyName} assistant. Ask me about our services, or I can connect you with our team.`}
+              />
+              <p className="text-sm text-subtle">
+                {s.chatAiKeyEnc
+                  ? "AI answers are on."
+                  : "No API key yet: the chat still works with simple answers from your FAQs and hands everything else to the team."}
+              </p>
+              <SubmitButton>Save chat settings</SubmitButton>
+            </div>
+          </Card>
+        </form>
+      </section>
 
       <section id="mail" className="mt-10 scroll-mt-8 space-y-6">
         <h2 className="font-display text-2xl font-semibold tracking-[-0.01em]">Email</h2>

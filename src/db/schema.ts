@@ -105,6 +105,13 @@ export const siteSettings = pgTable("site_settings", {
   // Address emails are sent from (e.g. a noreply@ group the SMTP user may send as). Defaults to smtpUser.
   smtpFromAddress: varchar("smtp_from_address", { length: 200 }),
   autoReply: boolean("auto_reply").notNull().default(true),
+  // Website chat assistant
+  chatEnabled: boolean("chat_enabled").notNull().default(false),
+  chatAssigneeId: integer("chat_assignee_id"),
+  chatWelcome: text("chat_welcome"),
+  chatAiKeyEnc: text("chat_ai_key_enc"),
+  chatAiModel: varchar("chat_ai_model", { length: 80 }),
+  chatDailyLimit: integer("chat_daily_limit").notNull().default(400),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .defaultNow()
     .notNull()
@@ -264,6 +271,8 @@ export const leads = pgTable(
     notes: text("notes").notNull().default(""),
     ip: varchar("ip", { length: 64 }),
     userAgent: text("user_agent"),
+    // Who handles this enquiry (chat cases are assigned automatically).
+    assignedTo: integer("assigned_to").references(() => users.id, { onDelete: "set null" }),
     ...timestamps,
   },
   (t) => [index("leads_status_idx").on(t.status), index("leads_created_idx").on(t.createdAt)],
@@ -370,3 +379,56 @@ export type Job = typeof jobs.$inferSelect;
 export type Application = typeof applications.$inferSelect;
 export type Lead = typeof leads.$inferSelect;
 export type Media = typeof media.$inferSelect;
+
+/* ---------- Website chat ---------- */
+export type ChatCard = { kind: "service" | "case" | "page"; title: string; text: string; href: string };
+export type ChatMeta = {
+  cards?: ChatCard[];
+  quickReplies?: string[];
+  askContact?: boolean;
+  ai?: boolean;
+  agentName?: string;
+};
+
+export const chatSessions = pgTable(
+  "chat_sessions",
+  {
+    id: serial("id").primaryKey(),
+    token: varchar("token", { length: 64 }).notNull().unique(),
+    status: varchar("status", { length: 20 }).notNull().default("bot"), // bot | waiting | live | closed
+    visitorName: varchar("visitor_name", { length: 160 }),
+    visitorEmail: varchar("visitor_email", { length: 200 }),
+    visitorPhone: varchar("visitor_phone", { length: 60 }),
+    visitorOrg: varchar("visitor_org", { length: 200 }),
+    topic: varchar("topic", { length: 200 }),
+    page: varchar("page", { length: 500 }),
+    leadId: integer("lead_id").references(() => leads.id, { onDelete: "set null" }),
+    assignedTo: integer("assigned_to").references(() => users.id, { onDelete: "set null" }),
+    ip: varchar("ip", { length: 64 }),
+    userAgent: text("user_agent"),
+    visitorSeenAt: timestamp("visitor_seen_at", { withTimezone: true }).defaultNow().notNull(),
+    adminSeenAt: timestamp("admin_seen_at", { withTimezone: true }),
+    lastMessageAt: timestamp("last_message_at", { withTimezone: true }).defaultNow().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("chat_sessions_status_idx").on(t.status), index("chat_sessions_last_idx").on(t.lastMessageAt)],
+);
+
+export const chatMessages = pgTable(
+  "chat_messages",
+  {
+    id: serial("id").primaryKey(),
+    sessionId: integer("session_id")
+      .notNull()
+      .references(() => chatSessions.id, { onDelete: "cascade" }),
+    role: varchar("role", { length: 20 }).notNull(), // visitor | bot | agent | system
+    body: text("body").notNull(),
+    meta: jsonb("meta").$type<ChatMeta>(),
+    agentId: integer("agent_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [index("chat_messages_session_idx").on(t.sessionId, t.id)],
+);
+
+export type ChatSession = typeof chatSessions.$inferSelect;
+export type ChatMessage = typeof chatMessages.$inferSelect;

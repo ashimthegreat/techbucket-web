@@ -299,6 +299,19 @@ export async function contentChecks(c: Collector) {
     fix: "Reply, then set each one to Contacted.",
     href: "/admin/leads?status=new",
   });
+  const [waitingChats] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(schema.chatSessions)
+    .where(and(eq(schema.chatSessions.status, "waiting"), lt(schema.chatSessions.lastMessageAt, sql`now() - interval '30 minutes'`)));
+  c.check(waitingChats.n === 0, {
+    id: "chats-waiting",
+    category: "operations",
+    severity: "critical",
+    title: `${waitingChats.n} website chat${waitingChats.n === 1 ? " has" : "s have"} waited over 30 minutes for a reply`,
+    passTitle: "No chats left waiting",
+    fix: "Reply in Live chat (the visitor gets your reply by email if they left), or close the chat.",
+    href: "/admin/chats",
+  });
   c.check(waitingApps.n === 0, {
     id: "apps-waiting",
     category: "operations",
