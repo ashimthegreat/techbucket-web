@@ -43,7 +43,11 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
       <SiteFooter settings={settings} services={services} industries={industries} />
       <JsonLd data={org} />
       {settings.chatEnabled && (
-        <ChatWidget companyName={settings.companyName} teaser="Namaste! Looking for CCTV, networking, security or software? Ask me and I'll point you the right way." />
+        <ChatWidget
+          companyName={settings.companyName}
+          ai={!!settings.chatAiKeyEnc}
+          teaser="Namaste! Looking for CCTV, networking, security or software? Ask me and I'll point you the right way."
+        />
       )}
     </>
   );

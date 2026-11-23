@@ -7,6 +7,10 @@ export type Knowledge = {
   text: string;
   cards: Map<string, ChatCard>;
   faqs: { q: string; a: string; card?: string }[];
+  /** Service menu for the guided (no-AI) assistant. */
+  services: { id: string; title: string; summary: string; faqs: { q: string; a: string }[] }[];
+  /** Address, phone, email and hours, ready to show. */
+  contactText: string;
   company: string;
   phone: string;
   email: string;
@@ -78,7 +82,23 @@ export async function knowledge(): Promise<Knowledge> {
   cards.set("page:careers", { kind: "page", title: "Careers", text: "Open positions at Tech Bucket", href: "/careers" });
   out.push("\nOther pages: [page:contact] contact page, [page:careers] job openings.");
 
-  const k: Knowledge = { text: out.join("\n"), cards, faqs, company: s.companyName, phone: s.phonePrimary, email: s.email };
+  const k: Knowledge = {
+    text: out.join("\n"),
+    cards,
+    faqs,
+    services: services.map((x) => ({ id: `service:${x.slug}`, title: x.title, summary: plainText(x.summary, 500), faqs: x.faqs })),
+    contactText: [
+      `Office: ${s.address}`,
+      `Phone: ${s.phonePrimary}${s.phoneSecondary ? `, ${s.phoneSecondary}` : ""}`,
+      `Email: ${s.email}`,
+      s.openingHours ? `Hours: ${s.openingHours.replace(/\bSu\b/g, "Sun").replace(/\bFr\b/g, "Fri").replace(/\bSa\b/g, "Sat")}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    company: s.companyName,
+    phone: s.phonePrimary,
+    email: s.email,
+  };
   cache = { at: Date.now(), k };
   return k;
 }

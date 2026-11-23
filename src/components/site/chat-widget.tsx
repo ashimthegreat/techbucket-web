@@ -55,7 +55,7 @@ function ChatIcon({ className }: { className?: string }) {
   );
 }
 
-export function ChatWidget({ companyName: fullName, teaser }: { companyName: string; teaser: string }) {
+export function ChatWidget({ companyName: fullName, teaser, ai }: { companyName: string; teaser: string; ai: boolean }) {
   const companyName = fullName.replace(/\s+(pvt\.?|private)\s+(ltd\.?|limited)$/i, "");
   const [open, setOpen] = useState(false);
   const [state, setState] = useState<State | null>(null);
@@ -242,7 +242,7 @@ export function ChatWidget({ companyName: fullName, teaser }: { companyName: str
               <p className="truncate text-sm font-semibold">{status === "live" && agentName ? `${agentName} from ${companyName}` : `${companyName} assistant`}</p>
               <p className="flex items-center gap-1.5 text-xs text-fog">
                 <span className={`h-2 w-2 ${status === "live" ? "bg-emerald-400" : status === "waiting" ? "bg-amber-400" : "bg-accent"}`} />
-                {status === "live" ? "Team member online" : status === "waiting" ? "Connecting you to the team…" : "AI assistant · team on standby"}
+                {status === "live" ? "Team member online" : status === "waiting" ? "Connecting you to the team…" : ai ? "AI assistant · team on standby" : "Virtual assistant · team on standby"}
               </p>
             </div>
             <button type="button" onClick={() => setOpen(false)} aria-label="Close chat" className="grid h-9 w-9 place-items-center text-2xl leading-none text-fog hover:text-white">
@@ -377,7 +377,7 @@ export function ChatWidget({ companyName: fullName, teaser }: { companyName: str
               ) : (
                 <span>{status === "live" ? "You're chatting with our team" : "A team member will join shortly"}</span>
               )}
-              <span className="text-right">AI can make mistakes</span>
+              {ai && <span className="text-right">AI can make mistakes</span>}
             </div>
           </form>
         </section>

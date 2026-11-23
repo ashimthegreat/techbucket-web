@@ -154,7 +154,7 @@ export default async function SettingsAdmin({ searchParams }: Props) {
                 <div>
                   <TextField
                     name="chatAiKey"
-                    label="Anthropic API key"
+                    label="Anthropic API key (optional)"
                     type="password"
                     placeholder={s.chatAiKeyEnc ? "•••••••• saved; leave blank to keep" : "sk-ant-…"}
                     hint="from console.anthropic.com"
@@ -182,7 +182,7 @@ export default async function SettingsAdmin({ searchParams }: Props) {
               <p className="text-sm text-subtle">
                 {s.chatAiKeyEnc
                   ? "AI answers are on."
-                  : "No API key yet: the chat still works with simple answers from your FAQs and hands everything else to the team."}
+                  : "No API key: the chat runs as a guided assistant (free). It offers menus of your services, answers from each service's FAQs, shows contact details and passes quotes and questions it can't answer to the team. Add a key later to switch on AI answers."}
               </p>
               <SubmitButton>Save chat settings</SubmitButton>
             </div>

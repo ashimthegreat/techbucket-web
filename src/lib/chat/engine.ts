@@ -61,7 +61,7 @@ export async function startSession(opts: { page?: string; ip?: string; userAgent
     .values({ token: randomBytes(24).toString("base64url"), page: opts.page?.slice(0, 500), ip: opts.ip, userAgent: opts.userAgent?.slice(0, 500) })
     .returning();
   await addMessage(session.id, "bot", s.chatWelcome?.trim() || `Namaste! I'm the ${s.companyName} assistant. Ask me about our services, or I can connect you with our team.`, {
-    quickReplies: ["Our services", "Get a quote", "Talk to a person"],
+    quickReplies: ["Our services", "Get a quote", "Talk to a person", "Contact details"],
   });
   return session;
 }
