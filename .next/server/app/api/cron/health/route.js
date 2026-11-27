@@ -1,0 +1,12 @@
+var R=require("../../../../chunks/[turbopack]_runtime.js")("server/app/api/cron/health/route.js")
+R.c("server/chunks/src_0ugy7b4yp0y_l._.js")
+R.c("server/chunks/[root-of-the-server]__1nmsslrhb6-zk._.js")
+R.c("server/chunks/node_modules_next_1lo724y0ayaf6._.js")
+R.c("server/chunks/node_modules_next_dist_0asya_d53xspt._.js")
+R.c("server/chunks/_089es2-tq691d._.js")
+R.c("server/chunks/[root-of-the-server]__15bjnu5yieigz._.js")
+R.c("server/chunks/_1zr776msnnowh._.js")
+R.c("server/chunks/node_modules_next_dist_1zpao19gb4gey._.js")
+R.c("server/chunks/_next-internal_server_app_api_cron_health_route_actions_0n_9ej7krdhi2.js")
+R.m(87018)
+module.exports=R.m(87018).exports
